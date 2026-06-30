@@ -1,0 +1,1 @@
+export const walkthroughSteps = [ { target: "dashboard", title: "Dashboard", body: "Start here for key activity and system health." }, { target: "records", title: "Records", body: "Use records as the reusable module for app-specific data." }, { target: "support", title: "Support", body: "Raise support requests without exposing sensitive data by default." } ];

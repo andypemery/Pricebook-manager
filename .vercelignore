@@ -1,0 +1,7 @@
+.git
+.next
+.vercel
+node_modules
+coverage
+*.log
+tsconfig.tsbuildinfo

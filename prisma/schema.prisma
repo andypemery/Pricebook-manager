@@ -1,0 +1,628 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  AXIOM_ADMIN
+  CUSTOMER_ADMIN
+  SUPER_USER
+  VIEW_ONLY
+}
+
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+  DISABLED
+}
+
+enum SupportStatus {
+  NEW
+  TRIAGE
+  WAITING_FOR_CUSTOMER
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+  REJECTED
+}
+
+enum FeatureRequestStatus {
+  SUBMITTED
+  UNDER_REVIEW
+  MORE_INFO_NEEDED
+  ACCEPTED
+  DECLINED
+  PLANNED
+  IN_PROGRESS
+  RELEASED
+}
+
+enum SecuritySeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum GlobalMessageScope {
+  GLOBAL
+  APP
+  TENANT
+  ROLE
+}
+
+enum DataSubjectRequestType {
+  SAR
+  ERASURE
+  RECTIFICATION
+  RESTRICTION
+  PORTABILITY
+  OBJECTION
+  CONSENT_WITHDRAWAL
+}
+
+enum DataSubjectRequestStatus {
+  NEW
+  VERIFYING
+  UNDER_REVIEW
+  AWAITING_APPROVAL
+  COMPLETED
+  REJECTED
+}
+
+enum EmailProviderMode {
+  AXIOM
+  MICROSOFT_GRAPH
+  SMTP
+}
+
+enum EmailConnectionStatus {
+  NOT_CONFIGURED
+  CONFIGURED
+  CONNECTED
+  DISCONNECTED
+  FAILED
+  DISABLED
+}
+
+model Tenant {
+  id                  String               @id @default(cuid())
+  name                String
+  slug                String               @unique
+  status              TenantStatus         @default(ACTIVE)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+
+  users               User[]
+  records             SampleRecord[]
+  tickets             SupportTicket[]
+  featureRequests     FeatureRequest[]
+  securityIssues      SecurityIssue[]
+  globalMessages      GlobalMessage[]
+  fileReferences      FileReference[]
+  dataSubjectRequests DataSubjectRequest[]
+  dataRegisterItems   DataRegisterItem[]
+  privacyNotices      PrivacyNotice[]
+  emailTemplates      EmailTemplate[]
+  emailProviderSetting EmailProviderSetting?
+  emailSendLogs        EmailSendLog[]
+  userInvites         UserInvite[]
+  userImportBatches   UserImportBatch[]
+  roleTemplates       RoleTemplate[]
+  emailSenderProfiles EmailSenderProfile[]
+  notificationRoutes  NotificationRoute[]
+  passwordPolicy      PasswordPolicy?
+  backupStatuses      BackupStatus[]
+  auditLogs           AuditLog[]
+  settings            TenantSetting[]
+  usageSnapshots      UsageSnapshot[]
+
+  @@index([status])
+}
+
+model User {
+  id                     String                         @id @default(cuid())
+  tenantId               String?
+  tenant                 Tenant?                        @relation(fields: [tenantId], references: [id])
+  email                  String                         @unique
+  firstName              String
+  surname                String
+  role                   UserRole                       @default(VIEW_ONLY)
+  permissions            Json?
+  passwordHash           String?
+  isActive               Boolean                        @default(true)
+  invitedAt              DateTime?
+  inviteAcceptedAt       DateTime?
+  themePreference        String                         @default("dark")
+  forcePasswordChange    Boolean                        @default(true)
+  mfaRequired            Boolean                        @default(false)
+  failedLoginCount       Int                            @default(0)
+  failedLoginWindowStart DateTime?
+  lockedUntil            DateTime?
+  lastLoginAt            DateTime?
+  walkthroughCompletedAt DateTime?
+  createdAt              DateTime                       @default(now())
+  updatedAt              DateTime                       @updatedAt
+
+  sessions               Session[]
+  passwordResetTokens    PasswordResetToken[]
+  mfaChallenges          MfaChallenge[]
+  userInvites            UserInvite[]
+  createdRecords         SampleRecord[]                 @relation("RecordCreator")
+  updatedRecords         SampleRecord[]                 @relation("RecordUpdater")
+  auditLogs              AuditLog[]
+  messageAcknowledgements GlobalMessageAcknowledgement[]
+  emailSendLogs          EmailSendLog[]
+
+  @@index([tenantId])
+  @@index([role])
+}
+
+model UserImportBatch {
+  id              String          @id @default(cuid())
+  tenantId        String
+  tenant          Tenant          @relation(fields: [tenantId], references: [id])
+  fileName        String
+  createdById     String?
+  status          String          @default("PREVIEW")
+  importedCount   Int             @default(0)
+  inviteSentCount Int             @default(0)
+  skippedCount    Int             @default(0)
+  createdAt       DateTime        @default(now())
+  confirmedAt     DateTime?
+
+  rows            UserImportRow[]
+
+  @@index([tenantId, createdAt])
+}
+
+model UserImportRow {
+  id              String          @id @default(cuid())
+  batchId         String
+  batch           UserImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  rowNumber       Int
+  firstName       String?
+  surname         String?
+  email           String?
+  roleLabel       String?
+  role            UserRole?
+  permissions     Json?
+  isValid         Boolean         @default(false)
+  error           String?
+  importedUserId  String?
+  inviteSentAt    DateTime?
+  createdAt       DateTime        @default(now())
+
+  @@index([batchId, isValid])
+}
+
+model UserInvite {
+  id          String    @id @default(cuid())
+  tenantId    String
+  tenant      Tenant    @relation(fields: [tenantId], references: [id])
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  email       String
+  tokenHash   String    @unique
+  expiresAt   DateTime
+  usedAt      DateTime?
+  createdById String?
+  createdAt   DateTime  @default(now())
+  resentAt    DateTime?
+
+  @@index([tenantId, email])
+  @@index([expiresAt])
+}
+
+model Session {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash   String   @unique
+  expiresAt   DateTime
+  userAgent   String?
+  ipAddress   String?
+  createdAt   DateTime @default(now())
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+}
+
+model MfaChallenge {
+  id            String    @id @default(cuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  challengeHash String    @unique
+  codeHash      String
+  failedAttemptCount Int   @default(0)
+  expiresAt     DateTime
+  usedAt        DateTime?
+  createdAt     DateTime  @default(now())
+}
+
+model SampleRecord {
+  id          String          @id @default(cuid())
+  tenantId    String
+  tenant      Tenant          @relation(fields: [tenantId], references: [id])
+  title       String
+  status      String          @default("New")
+  description String?
+  createdById String?
+  createdBy   User?           @relation("RecordCreator", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   User?           @relation("RecordUpdater", fields: [updatedById], references: [id])
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  archivedAt  DateTime?
+
+  notes       RecordNote[]
+  files       FileReference[]
+
+  @@index([tenantId, status])
+}
+
+model RecordNote {
+  id          String       @id @default(cuid())
+  recordId    String
+  record      SampleRecord @relation(fields: [recordId], references: [id], onDelete: Cascade)
+  note        String
+  createdById String?
+  createdAt   DateTime     @default(now())
+}
+
+model SupportTicket {
+  id             String        @id @default(cuid())
+  tenantId       String
+  tenant         Tenant        @relation(fields: [tenantId], references: [id])
+  requesterId    String?
+  requesterEmail String
+  title          String
+  description    String
+  ticketType     String
+  affectedArea   String
+  status         SupportStatus @default(NEW)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([tenantId, status])
+}
+
+model FeatureRequest {
+  id             String               @id @default(cuid())
+  tenantId       String
+  tenant         Tenant               @relation(fields: [tenantId], references: [id])
+  requesterId    String?
+  title          String
+  requestType    String
+  businessReason String
+  benefit        String?
+  affectedArea   String
+  status         FeatureRequestStatus @default(SUBMITTED)
+  commercialFlag String?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  @@index([tenantId, status])
+}
+
+model SecurityIssue {
+  id          String           @id @default(cuid())
+  tenantId    String
+  tenant      Tenant           @relation(fields: [tenantId], references: [id])
+  userId      String?
+  userEmail   String
+  pageUrl     String
+  description String
+  severity    SecuritySeverity @default(MEDIUM)
+  status      String           @default("Open")
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([tenantId, severity])
+}
+
+model GlobalMessage {
+  id                  String                         @id @default(cuid())
+  tenantId            String?
+  tenant              Tenant?                        @relation(fields: [tenantId], references: [id])
+  scope               GlobalMessageScope             @default(TENANT)
+  message             String
+  startsAt            DateTime                       @default(now())
+  endsAt              DateTime?
+  untilAcknowledged   Boolean                        @default(false)
+  isActive            Boolean                        @default(true)
+  createdById         String?
+  createdAt           DateTime                       @default(now())
+
+  acknowledgements    GlobalMessageAcknowledgement[]
+}
+
+model GlobalMessageAcknowledgement {
+  id              String        @id @default(cuid())
+  globalMessageId String
+  globalMessage   GlobalMessage @relation(fields: [globalMessageId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  acknowledgedAt  DateTime      @default(now())
+
+  @@unique([globalMessageId, userId])
+}
+
+model FileReference {
+  id               String            @id @default(cuid())
+  tenantId         String
+  tenant           Tenant            @relation(fields: [tenantId], references: [id])
+  sampleRecordId   String?
+  sampleRecord     SampleRecord?      @relation(fields: [sampleRecordId], references: [id])
+  originalFileName String
+  fileType         String
+  fileSizeBytes    Int
+  storageKey       String
+  liveUrl          String?
+  backupStorageKey String?
+  backupUrl        String?
+  visibility       String            @default("private")
+  checksum         String?
+  uploadedById     String?
+  retentionStatus  String            @default("active")
+  deletedAt        DateTime?
+  createdAt        DateTime          @default(now())
+
+  accessEvents     FileAccessEvent[]
+
+  @@index([tenantId])
+}
+
+model FileAccessEvent {
+  id                     String        @id @default(cuid())
+  fileReferenceId        String
+  fileReference          FileReference @relation(fields: [fileReferenceId], references: [id], onDelete: Cascade)
+  tenantId               String
+  userId                 String?
+  actionType             String
+  estimatedTransferBytes Int?
+  createdAt              DateTime      @default(now())
+
+  @@index([tenantId, actionType])
+}
+
+model DataSubjectRequest {
+  id             String                   @id @default(cuid())
+  tenantId       String
+  tenant         Tenant                   @relation(fields: [tenantId], references: [id])
+  requestType    DataSubjectRequestType
+  requesterName  String
+  requesterEmail String
+  status         DataSubjectRequestStatus @default(NEW)
+  decisionNotes  String?
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+
+  @@index([tenantId, status])
+}
+
+model DataRegisterItem {
+  id               String   @id @default(cuid())
+  tenantId         String
+  tenant           Tenant   @relation(fields: [tenantId], references: [id])
+  moduleName       String
+  dataCategory     String
+  purpose          String
+  lawfulBasis      String
+  retentionPeriod  String
+  sensitivityLevel String
+  includeInSar     Boolean  @default(true)
+  canErase         Boolean  @default(false)
+  reviewedAt       DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model PrivacyNotice {
+  id                     String   @id @default(cuid())
+  tenantId               String
+  tenant                 Tenant   @relation(fields: [tenantId], references: [id])
+  version                String
+  wording                String
+  url                    String?
+  requireAcknowledgement Boolean  @default(false)
+  isPublished            Boolean  @default(false)
+  createdAt              DateTime @default(now())
+}
+
+model RoleTemplate {
+  id              String   @id @default(cuid())
+  tenantId        String
+  tenant          Tenant   @relation(fields: [tenantId], references: [id])
+  role            UserRole
+  displayName     String
+  permissions     Json
+  nameLocked      Boolean  @default(true)
+  updatedById     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([tenantId, role])
+}
+
+model EmailSenderProfile {
+  id              String   @id @default(cuid())
+  tenantId        String?
+  tenant          Tenant?  @relation(fields: [tenantId], references: [id])
+  key             String
+  displayName     String
+  fromEmail       String
+  replyToEmail    String?
+  isAxiomManaged  Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  routes          NotificationRoute[]
+
+  @@unique([tenantId, key])
+}
+
+model NotificationRoute {
+  id              String              @id @default(cuid())
+  tenantId        String?
+  tenant          Tenant?             @relation(fields: [tenantId], references: [id])
+  notificationType String
+  senderProfileId String?
+  senderProfile   EmailSenderProfile? @relation(fields: [senderProfileId], references: [id])
+  fallbackEmail    String?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  @@unique([tenantId, notificationType])
+}
+
+model EmailTemplate {
+  id              String   @id @default(cuid())
+  tenantId        String?
+  tenant          Tenant?  @relation(fields: [tenantId], references: [id])
+  key             String
+  subject         String
+  body            String
+  requiredVariables Json?
+  isLockedByAxiom Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([tenantId, key])
+}
+
+
+model EmailProviderSetting {
+  id                         String                @id @default(cuid())
+  tenantId                   String                @unique
+  tenant                     Tenant                @relation(fields: [tenantId], references: [id])
+  mode                       EmailProviderMode     @default(AXIOM)
+  status                     EmailConnectionStatus @default(NOT_CONFIGURED)
+  isEnabled                  Boolean               @default(true)
+  customerSendingDisabled    Boolean               @default(false)
+  axiomFallbackEnabled       Boolean               @default(true)
+  senderDisplayName          String                @default("Axiom Notifications")
+  fromEmail                  String                @default("notifications@axiomps.co.uk")
+  replyToEmail               String?               @default("notifications@axiomps.co.uk")
+  smtpHost                   String?
+  smtpPort                   Int?
+  smtpUsername               String?
+  smtpPasswordEncrypted      String?
+  smtpSecure                 Boolean               @default(true)
+  graphTenantId              String?
+  graphClientId              String?
+  graphClientSecretEncrypted String?
+  graphSenderEmail           String?
+  graphSenderUserId          String?
+  graphRefreshTokenEncrypted String?
+  lastTestResult             String?
+  lastSuccessfulSendAt       DateTime?
+  lastFailedSendAt           DateTime?
+  lastError                  String?
+  updatedById                String?
+  createdAt                  DateTime              @default(now())
+  updatedAt                  DateTime              @updatedAt
+}
+
+model EmailSendLog {
+  id               String            @id @default(cuid())
+  tenantId         String?
+  tenant           Tenant?           @relation(fields: [tenantId], references: [id])
+  userId           String?
+  user             User?             @relation(fields: [userId], references: [id])
+  notificationType String?
+  providerMode     EmailProviderMode
+  toEmailHash      String?
+  subject          String?
+  success          Boolean           @default(false)
+  eventType        String
+  safeMessage      String?
+  createdAt        DateTime          @default(now())
+
+  @@index([tenantId, createdAt])
+  @@index([eventType])
+}
+
+model PasswordPolicy {
+  id               String   @id @default(cuid())
+  tenantId         String   @unique
+  tenant           Tenant   @relation(fields: [tenantId], references: [id])
+  minLength        Int      @default(8)
+  requireUppercase Boolean  @default(true)
+  requireLowercase Boolean  @default(true)
+  requireNumber    Boolean  @default(true)
+  requireLetter    Boolean  @default(true)
+  requireSpecial   Boolean  @default(false)
+  updatedAt        DateTime @updatedAt
+}
+
+model TenantSetting {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  key       String
+  value     Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, key])
+}
+
+model UsageSnapshot {
+  id               String   @id @default(cuid())
+  tenantId         String
+  tenant           Tenant   @relation(fields: [tenantId], references: [id])
+  storageUsedBytes Int      @default(0)
+  userCount        Int      @default(0)
+  recordCount      Int      @default(0)
+  supportOpenCount Int      @default(0)
+  securityOpenCount Int     @default(0)
+  createdAt        DateTime @default(now())
+
+  @@index([tenantId])
+}
+
+model BackupStatus {
+  id                         String   @id @default(cuid())
+  tenantId                   String
+  tenant                     Tenant   @relation(fields: [tenantId], references: [id])
+  backupType                 String
+  status                     String   @default("NOT_CONFIGURED")
+  lastStartedAt              DateTime?
+  lastCompletedAt            DateTime?
+  latestVerifiedRestorePoint DateTime?
+  restoreRetentionDays       Int      @default(7)
+  verificationStatus         String?
+  locationReference          String?
+  updatedAt                  DateTime @updatedAt
+
+  @@unique([tenantId, backupType])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  tenantId   String?
+  tenant     Tenant?  @relation(fields: [tenantId], references: [id])
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id])
+  action     String
+  entityType String
+  entityId   String?
+  before     Json?
+  after      Json?
+  reason     String?
+  createdAt  DateTime @default(now())
+
+  @@index([tenantId, action])
+}

@@ -1,0 +1,2 @@
+export const dynamic="force-dynamic"; import { forgotPasswordAction } from "@/lib/actions/auth.actions"; import { SubmitButton } from "@/components/submit-button";
+export default function Forgot(){return <div className="loginWrap"><form className="loginCard" action={forgotPasswordAction as unknown as (formData: FormData) => void}><h1>Reset password</h1><label className="field"><span>Email</span><input name="email" type="email" required/></label><SubmitButton>Send reset link</SubmitButton></form></div>}

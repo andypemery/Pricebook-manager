@@ -1,0 +1,1 @@
+export const storageConfig = { defaultDocumentLimitMb: 10, defaultImageLimitMb: 10, videoAudioEnabled: false, blockedDangerousExtensions: [".exe", ".bat", ".cmd", ".js", ".php", ".html", ".zip"], usageAlertThresholds: [50, 80, 95, 100] };

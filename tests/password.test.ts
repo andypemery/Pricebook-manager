@@ -1,0 +1,2 @@
+import { describe, expect, it } from "vitest"; import { validatePassword } from "../lib/password";
+describe("password policy",()=>{ it("accepts the Axiom baseline",()=>{ expect(validatePassword("My2nephews").ok).toBe(true); }); it("rejects weak passwords",()=>{ expect(validatePassword("password").ok).toBe(false); }); it("supports special character strengthening",()=>{ expect(validatePassword("My2nephews",{minLength:8,requireUppercase:true,requireLowercase:true,requireNumber:true,requireLetter:true,requireSpecial:true}).ok).toBe(false); }); });

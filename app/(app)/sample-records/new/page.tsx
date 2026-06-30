@@ -1,0 +1,2 @@
+export const dynamic="force-dynamic"; import { createSampleRecord } from "@/lib/actions/sample-record.actions"; import { SubmitButton } from "@/components/submit-button";
+export default function NewRecord(){return <section className="card"><h1>Add record</h1><form action={createSampleRecord as unknown as (formData: FormData) => void}><label className="field"><span>Title</span><input name="title" required/></label><label className="field"><span>Description</span><textarea name="description"/></label><SubmitButton>Create record</SubmitButton></form></section>}

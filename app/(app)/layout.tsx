@@ -1,0 +1,3 @@
+export const dynamic="force-dynamic";
+import { AppShell } from "@/components/app-shell"; import { GlobalBanner } from "@/components/global-banner"; import { requireUser } from "@/lib/auth"; import { appShellLogoPath, getTenantBranding } from "@/lib/branding";
+export default async function ProtectedLayout({children}:{children:React.ReactNode}){ const user=await requireUser(); const branding=await getTenantBranding(user.tenantId); return <AppShell user={user} themePreference={user.themePreference} smallLogoPath={appShellLogoPath(branding)}><GlobalBanner tenantId={user.tenantId}/>{children}</AppShell>; }
