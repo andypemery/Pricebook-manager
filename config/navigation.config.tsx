@@ -3,9 +3,15 @@ import type { User } from "@prisma/client";
 import {
   BadgeHelp,
   Bell,
+  Braces,
+  ClipboardCheck,
+  Columns3,
   DatabaseBackup,
+  FileCog,
   FileQuestion,
+  FileSpreadsheet,
   FileText,
+  FolderKanban,
   Gauge,
   Image,
   LayoutDashboard,
@@ -16,6 +22,7 @@ import {
   Settings,
   ShieldAlert,
   ShieldCheck,
+  Sparkles,
   TableProperties,
   UserCog,
   UsersRound
@@ -43,6 +50,13 @@ export type SettingsNavigationGroup = {
 
 export const navigationItems: NavigationItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, scope: "all" },
+  { href: "/projects", label: "Projects", icon: FolderKanban, scope: "all" },
+  { href: "/workbook", label: "Workbook", icon: FileSpreadsheet, scope: "all" },
+  { href: "/mapping", label: "Mapping", icon: Columns3, scope: "all" },
+  { href: "/validation", label: "Validation", icon: ClipboardCheck, scope: "all" },
+  { href: "/comparison", label: "Comparison", icon: Braces, scope: "all" },
+  { href: "/templates", label: "Templates", icon: FileCog, scope: "all" },
+  { href: "/generate", label: "Generate", icon: Sparkles, scope: "all" },
   { href: "/sample-records", label: "Demo Records", icon: TableProperties, scope: "all" },
   { href: "/account", label: "Account", icon: UserCog, scope: "all" },
   { href: "/settings", label: "Settings", icon: Settings, scope: "all" }
