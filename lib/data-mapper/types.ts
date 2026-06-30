@@ -35,7 +35,7 @@ export type DataMapperPlaceholderPage = {
   nextSteps: string[];
 };
 
-export type SupportedWorkbookExtension = ".xlsx" | ".xls" | ".xlsm";
+export type SupportedWorkbookExtension = ".xlsx" | ".xlsm";
 
 export type WorksheetImportStatus = "Ready" | "Empty worksheet" | "Missing headers";
 

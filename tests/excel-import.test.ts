@@ -1,21 +1,25 @@
 import { describe, expect, it } from "vitest";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import { assertSupportedWorkbookFile } from "../lib/data-mapper/excel-import/file-validation";
 import { detectHeaderRow } from "../lib/data-mapper/excel-import/header-detection";
 import { createWorkbookSummary } from "../lib/data-mapper/excel-import/workbook-summary";
 import { createWorksheetPreview, previewRowLimit } from "../lib/data-mapper/excel-import/worksheet-reader";
 
 function workbookFromRows(sheetName: string, rows: string[][]) {
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(rows), sheetName);
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet(sheetName);
+  worksheet.addRows(rows);
   return workbook;
 }
 
 describe("Excel import engine", () => {
   it("accepts supported Excel workbook extensions", () => {
     expect(() => assertSupportedWorkbookFile("pricebook.xlsx")).not.toThrow();
-    expect(() => assertSupportedWorkbookFile("pricebook.xls")).not.toThrow();
     expect(() => assertSupportedWorkbookFile("pricebook.xlsm")).not.toThrow();
+  });
+
+  it("rejects legacy binary workbooks with a friendly message", () => {
+    expect(() => assertSupportedWorkbookFile("pricebook.xls")).toThrow("Legacy .xls workbooks are not supported");
   });
 
   it("rejects unsupported file types with a friendly validation error", () => {
@@ -56,11 +60,12 @@ describe("Excel import engine", () => {
       ...Array.from({ length: 150 }, (_, index) => [`SKU-${index + 1}`, `Product ${index + 1}`])
     ];
     const workbook = workbookFromRows("Products", rows);
-    const worksheet = workbook.Sheets.Products;
+    const worksheet = workbook.getWorksheet("Products");
     const summary = createWorkbookSummary(workbook, "large-pricebook.xlsx").worksheets[0];
 
     expect(summary).toBeDefined();
     if (!summary) throw new Error("Expected worksheet summary");
+    if (!worksheet) throw new Error("Expected worksheet");
 
     const preview = createWorksheetPreview("Products", worksheet, summary);
     expect(preview.rows).toHaveLength(previewRowLimit);

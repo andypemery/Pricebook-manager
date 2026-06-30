@@ -1,40 +1,38 @@
-import * as XLSX from "xlsx";
-import type { WorkSheet } from "xlsx";
+import type ExcelJS from "exceljs";
 import type { WorksheetPreview, WorksheetSummary } from "@/lib/data-mapper/types";
 import { detectHeaderRow, displayHeaders } from "@/lib/data-mapper/excel-import/header-detection";
 
 const headerScanLimit = 25;
 export const previewRowLimit = 100;
 
-function worksheetRange(worksheet: WorkSheet) {
-  const ref = worksheet["!ref"];
-  if (!ref) return null;
-  return XLSX.utils.decode_range(ref);
-}
-
-function stringValue(value: unknown) {
+function cellValueToText(value: ExcelJS.CellValue): string {
   if (value === null || value === undefined) return "";
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === "object") {
+    if ("text" in value && typeof value.text === "string") return value.text.trim();
+    if ("result" in value) return cellValueToText(value.result as ExcelJS.CellValue);
+    if ("richText" in value && Array.isArray(value.richText)) {
+      return value.richText.map((part) => part.text).join("").trim();
+    }
+    if ("hyperlink" in value && "text" in value && typeof value.text === "string") return value.text.trim();
+    return "";
+  }
   return String(value).trim();
 }
 
-function rowMatrix(worksheet: WorkSheet, maxRows?: number) {
-  const range = worksheetRange(worksheet);
-  const boundedRange = range && maxRows
-    ? { ...range, e: { ...range.e, r: Math.min(range.e.r, range.s.r + maxRows - 1) } }
-    : undefined;
-
-  return XLSX.utils.sheet_to_json<unknown[]>(worksheet, {
-    header: 1,
-    defval: "",
-    raw: false,
-    blankrows: false,
-    range: boundedRange
+function rowMatrix(worksheet: ExcelJS.Worksheet, columnCount: number, maxRows?: number) {
+  const rowLimit = maxRows ? Math.min(maxRows, worksheet.rowCount) : worksheet.rowCount;
+  return Array.from({ length: rowLimit }, (_, rowOffset) => {
+    const row = worksheet.getRow(rowOffset + 1);
+    return Array.from({ length: columnCount }, (_, columnOffset) => cellValueToText(row.getCell(columnOffset + 1).value));
   });
 }
 
-export function createWorksheetSummary(name: string, worksheet: WorkSheet): WorksheetSummary {
-  const range = worksheetRange(worksheet);
-  if (!range) {
+export function createWorksheetSummary(name: string, worksheet: ExcelJS.Worksheet): WorksheetSummary {
+  const rowCount = worksheet.actualRowCount;
+  const columnCount = worksheet.actualColumnCount;
+
+  if (rowCount === 0 || columnCount === 0) {
     return {
       name,
       rowCount: 0,
@@ -46,9 +44,7 @@ export function createWorksheetSummary(name: string, worksheet: WorkSheet): Work
     };
   }
 
-  const rowCount = range.e.r - range.s.r + 1;
-  const columnCount = range.e.c - range.s.c + 1;
-  const rows = rowMatrix(worksheet, headerScanLimit);
+  const rows = rowMatrix(worksheet, columnCount, headerScanLimit);
   const headerDetection = detectHeaderRow(rows);
   const hasHeaders = headerDetection.rowNumber !== null;
 
@@ -63,9 +59,8 @@ export function createWorksheetSummary(name: string, worksheet: WorkSheet): Work
   };
 }
 
-export function createWorksheetPreview(name: string, worksheet: WorkSheet, summary: WorksheetSummary): WorksheetPreview {
-  const range = worksheetRange(worksheet);
-  if (!range || summary.detectedHeaderRow === null) {
+export function createWorksheetPreview(name: string, worksheet: ExcelJS.Worksheet, summary: WorksheetSummary): WorksheetPreview {
+  if (summary.rowCount === 0 || summary.detectedHeaderRow === null) {
     return {
       worksheetName: name,
       headers: summary.headers,
@@ -75,12 +70,12 @@ export function createWorksheetPreview(name: string, worksheet: WorkSheet, summa
     };
   }
 
-  const rows = rowMatrix(worksheet, summary.detectedHeaderRow + previewRowLimit);
+  const rows = rowMatrix(worksheet, summary.columnCount, summary.detectedHeaderRow + previewRowLimit);
   const dataRows = rows.slice(summary.detectedHeaderRow, summary.detectedHeaderRow + previewRowLimit);
   return {
     worksheetName: name,
     headers: summary.headers,
-    rows: dataRows.map((row) => Array.from({ length: summary.columnCount }, (_, index) => stringValue(row[index]))),
+    rows: dataRows.map((row) => Array.from({ length: summary.columnCount }, (_, index) => row[index] ?? "")),
     sourceRowCount: summary.rowCount,
     previewRowLimit
   };

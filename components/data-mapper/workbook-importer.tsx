@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import type { WorkBook } from "xlsx";
+import type ExcelJS from "exceljs";
 import { ArrowDownUp, FileSpreadsheet, LoaderCircle, Search, Upload } from "lucide-react";
 import type { UploadedWorkbookDetails, WorkbookSummary, WorksheetPreview } from "@/lib/data-mapper/types";
 import { createWorksheetPreview, friendlyExcelImportMessage, readWorkbook } from "@/lib/data-mapper/excel-import";
@@ -45,7 +45,7 @@ function visibleRows(preview: WorksheetPreview | null, searchTerm: string, sort:
 
 export function WorkbookImporter() {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [workbook, setWorkbook] = useState<WorkBook | null>(null);
+  const [workbook, setWorkbook] = useState<ExcelJS.Workbook | null>(null);
   const [summary, setSummary] = useState<WorkbookSummary | null>(null);
   const [uploadDetails, setUploadDetails] = useState<UploadedWorkbookDetails | null>(null);
   const [selectedWorksheetName, setSelectedWorksheetName] = useState<string | null>(null);
@@ -58,7 +58,7 @@ export function WorkbookImporter() {
   const selectedWorksheet = summary?.worksheets.find((worksheet) => worksheet.name === selectedWorksheetName) ?? summary?.worksheets[0] ?? null;
   const preview = useMemo(() => {
     if (!workbook || !selectedWorksheet) return null;
-    const worksheet = workbook.Sheets[selectedWorksheet.name];
+    const worksheet = workbook.getWorksheet(selectedWorksheet.name);
     if (!worksheet) return null;
     return createWorksheetPreview(selectedWorksheet.name, worksheet, selectedWorksheet);
   }, [selectedWorksheet, workbook]);
@@ -135,7 +135,7 @@ export function WorkbookImporter() {
           <span className="dropzoneIcon"><Upload aria-hidden="true" size={28} /></span>
           <div>
             <h2>Upload workbook</h2>
-            <p className="muted">Drop an Excel workbook here, or browse for a .xlsx, .xls or .xlsm file.</p>
+            <p className="muted">Drop an Excel workbook here, or browse for a .xlsx or .xlsm file. Legacy .xls files should be saved in a modern Excel format first.</p>
             <div className="actions">
               <button className="primary" type="button" onClick={() => inputRef.current?.click()} disabled={isLoading}>
                 {isLoading ? <LoaderCircle aria-hidden="true" size={18} className="spinIcon" /> : <FileSpreadsheet aria-hidden="true" size={18} />}
@@ -147,7 +147,7 @@ export function WorkbookImporter() {
             ref={inputRef}
             className="visuallyHidden"
             type="file"
-            accept=".xlsx,.xls,.xlsm"
+            accept=".xlsx,.xlsm"
             onChange={(event) => handleFiles(event.target.files)}
           />
         </div>
