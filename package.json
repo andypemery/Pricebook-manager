@@ -1,8 +1,8 @@
 {
-  "name": "axiom-standard-base-app",
+  "name": "axiom-data-mapper",
   "version": "1.0.9",
   "private": true,
-  "description": "Reusable source-code foundation for future Axiom standard apps.",
+  "description": "Axiom pricebook import and export management application.",
   "engines": {
     "node": "24.x"
   },
