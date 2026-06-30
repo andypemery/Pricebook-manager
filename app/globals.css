@@ -526,6 +526,135 @@ p { line-height: 1.6; }
   gap: 14px;
   padding: 18px;
 }
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.workbookDropzone {
+  min-height: 220px;
+  border: 1px dashed rgba(0, 199, 243, 0.52);
+  border-radius: 14px;
+  background: var(--surface-panel);
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 24px;
+  margin-bottom: 16px;
+  transition: border-color 140ms ease, background 140ms ease, transform 140ms ease;
+}
+.workbookDropzone.active {
+  border-color: var(--axiom-aqua);
+  background: rgba(0, 199, 243, 0.14);
+  transform: translateY(-1px);
+}
+.dropzoneIcon {
+  width: 58px;
+  height: 58px;
+  border-radius: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 199, 243, 0.12);
+  color: var(--axiom-aqua);
+  flex: 0 0 auto;
+}
+.spinIcon { animation: spin 850ms linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.workbookExplorerLayout { display: grid; grid-template-columns: minmax(280px, 0.85fr) minmax(0, 1.15fr); gap: 20px; align-items: start; }
+.worksheetList { display: grid; gap: 10px; }
+.worksheetButton {
+  width: 100%;
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
+  background: var(--surface-panel);
+  color: var(--text-main);
+  padding: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.worksheetButton strong, .worksheetButton small { display: block; }
+.worksheetButton small { color: var(--text-muted); margin-top: 4px; }
+.worksheetButton:hover, .worksheetButton:focus-visible, .worksheetButton.active {
+  border-color: rgba(0, 236, 227, 0.48);
+  outline: none;
+}
+.worksheetButton.active { box-shadow: inset 3px 0 0 var(--axiom-blue); }
+.searchBox {
+  min-height: 42px;
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  background: rgba(5, 3, 20, 0.38);
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+}
+.searchBox input {
+  min-width: min(280px, 56vw);
+  border: 0;
+  background: transparent;
+  color: var(--text-main);
+  outline: none;
+}
+.previewTableWrap {
+  max-height: 620px;
+  overflow: auto;
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
+  background: var(--surface-panel);
+}
+.previewTable {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+}
+.previewTable th, .previewTable td {
+  min-width: 160px;
+  max-width: 320px;
+  padding: 12px;
+  border-bottom: 1px solid var(--border-muted);
+  border-right: 1px solid var(--border-muted);
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.previewTable th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: rgba(18, 4, 98, 0.98);
+}
+.theme-light .previewTable th { background: #f8fbff; }
+@media (prefers-color-scheme: light) { .theme-system .previewTable th { background: #f8fbff; } }
+.previewTable th button {
+  width: 100%;
+  min-height: 28px;
+  border: 0;
+  background: transparent;
+  color: var(--text-main);
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0;
+  font-weight: 800;
+  cursor: pointer;
+}
+.previewTable tbody tr:hover td { background: rgba(0, 199, 243, 0.04); }
 .pagination { display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap; padding-top: 14px; color: var(--text-muted); }
 .pageControls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .pageButton { border: 1px solid var(--border-soft); border-radius: 10px; padding: 8px 10px; text-decoration: none; color: var(--text-main); }
@@ -555,6 +684,9 @@ p { line-height: 1.6; }
   .splitHero .actions { margin-top: 16px; }
   .dashboardLayout { grid-template-columns: 1fr; }
   .uploadPanel { align-items: flex-start; }
+  .workbookDropzone { align-items: flex-start; }
+  .workbookExplorerLayout { grid-template-columns: 1fr; }
+  .worksheetButton { align-items: flex-start; flex-direction: column; }
 }
 
 @media print {

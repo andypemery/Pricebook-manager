@@ -1,5 +1,5 @@
-import { DataMapperPlaceholder } from "@/lib/data-mapper/page-content";
+import { WorkbookImporter } from "@/components/data-mapper/workbook-importer";
 
 export default function WorkbookPage() {
-  return <DataMapperPlaceholder pageKey="workbook" />;
+  return <WorkbookImporter />;
 }

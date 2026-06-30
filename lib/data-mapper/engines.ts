@@ -5,13 +5,13 @@ export const dataMapperEngines: DataMapperEngineDefinition[] = [
     key: "excelImport",
     name: "Excel import engine",
     purpose: "Accept uploaded master workbooks and hand workbook streams to the parser.",
-    status: "placeholder"
+    status: "ready"
   },
   {
     key: "workbookParser",
     name: "Workbook parser",
     purpose: "Read workbook tabs, normalise worksheet metadata and prepare row batches.",
-    status: "placeholder"
+    status: "ready"
   },
   {
     key: "validation",

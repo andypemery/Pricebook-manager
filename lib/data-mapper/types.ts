@@ -34,3 +34,46 @@ export type DataMapperPlaceholderPage = {
   capabilities: string[];
   nextSteps: string[];
 };
+
+export type SupportedWorkbookExtension = ".xlsx" | ".xls" | ".xlsm";
+
+export type WorksheetImportStatus = "Ready" | "Empty worksheet" | "Missing headers";
+
+export type HeaderDetectionResult = {
+  rowNumber: number | null;
+  headers: string[];
+  confidence: "high" | "medium" | "low" | "none";
+  message: string | null;
+};
+
+export type WorksheetSummary = {
+  name: string;
+  rowCount: number;
+  columnCount: number;
+  detectedHeaderRow: number | null;
+  headers: string[];
+  importStatus: WorksheetImportStatus;
+  message: string | null;
+};
+
+export type WorkbookSummary = {
+  workbookName: string;
+  worksheetCount: number;
+  totalRows: number;
+  totalColumns: number;
+  worksheets: WorksheetSummary[];
+};
+
+export type UploadedWorkbookDetails = {
+  fileName: string;
+  fileSize: number;
+  uploadedAt: string;
+};
+
+export type WorksheetPreview = {
+  worksheetName: string;
+  headers: string[];
+  rows: string[][];
+  sourceRowCount: number;
+  previewRowLimit: number;
+};
