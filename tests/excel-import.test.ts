@@ -1,7 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import ExcelJS from "exceljs";
 import { assertSupportedWorkbookFile } from "../lib/data-mapper/excel-import/file-validation";
 import { detectHeaderRow } from "../lib/data-mapper/excel-import/header-detection";
+import { friendlyExcelImportMessage } from "../lib/data-mapper/excel-import/errors";
+import { readWorkbook } from "../lib/data-mapper/excel-import/workbook-reader";
 import { createWorkbookSummary } from "../lib/data-mapper/excel-import/workbook-summary";
 import { createWorksheetPreview, previewRowLimit } from "../lib/data-mapper/excel-import/worksheet-reader";
 
@@ -19,11 +21,32 @@ describe("Excel import engine", () => {
   });
 
   it("rejects legacy binary workbooks with a friendly message", () => {
-    expect(() => assertSupportedWorkbookFile("pricebook.xls")).toThrow("Legacy .xls workbooks are not supported");
+    expect(() => assertSupportedWorkbookFile("pricebook.xls")).toThrow("Please open 'pricebook.xls' in Excel, save it as .xlsx or .xlsm");
   });
 
   it("rejects unsupported file types with a friendly validation error", () => {
-    expect(() => assertSupportedWorkbookFile("pricebook.csv")).toThrow("Upload an Excel workbook");
+    expect(() => assertSupportedWorkbookFile("pricebook.csv")).toThrow("The file 'pricebook.csv' is not a supported Excel workbook");
+  });
+
+  it("includes the filename in workbook read failure messages and logs the underlying error in development", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    try {
+      await readWorkbook(new File([new Uint8Array([1, 2, 3, 4])], "broken-pricebook.xlsx"));
+      throw new Error("Expected workbook read to fail");
+    } catch (error) {
+      expect(friendlyExcelImportMessage(error)).toBe(
+        "The workbook 'broken-pricebook.xlsx' could not be read. It may be password protected, damaged, or saved in a format this importer cannot safely read. Please open the file in Excel, save it again as .xlsx, and try uploading the saved copy."
+      );
+      expect(consoleError).toHaveBeenCalledWith(
+        "[Axiom Data Mapper] ExcelJS workbook read failed",
+        expect.objectContaining({ fileName: "broken-pricebook.xlsx" })
+      );
+    } finally {
+      consoleError.mockRestore();
+      vi.unstubAllEnvs();
+    }
   });
 
   it("detects a header row below introductory worksheet text", () => {

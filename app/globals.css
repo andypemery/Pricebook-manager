@@ -565,6 +565,16 @@ p { line-height: 1.6; }
   color: var(--axiom-aqua);
   flex: 0 0 auto;
 }
+.selectedWorkbook {
+  display: grid;
+  gap: 4px;
+  margin-top: 10px;
+  color: var(--text-main);
+}
+.selectedWorkbook span {
+  color: var(--text-muted);
+  font-size: 0.88rem;
+}
 .spinIcon { animation: spin 850ms linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .workbookExplorerLayout { display: grid; grid-template-columns: minmax(280px, 0.85fr) minmax(0, 1.15fr); gap: 20px; align-items: start; }

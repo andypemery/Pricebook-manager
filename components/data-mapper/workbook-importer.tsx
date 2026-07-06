@@ -66,6 +66,7 @@ export function WorkbookImporter() {
   const [validationFilters, setValidationFilters] = useState<ValidationFilters>({ severity: "All", category: "All", worksheetName: "All" });
   const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
   const [uploadDetails, setUploadDetails] = useState<UploadedWorkbookDetails | null>(null);
+  const [selectedUploadDetails, setSelectedUploadDetails] = useState<UploadedWorkbookDetails | null>(null);
   const [selectedWorksheetName, setSelectedWorksheetName] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [sort, setSort] = useState<SortState>(null);
@@ -96,6 +97,12 @@ export function WorkbookImporter() {
     setError(null);
     setSearchTerm("");
     setSort(null);
+    const currentUploadDetails = {
+      fileName: file.name,
+      fileSize: file.size,
+      uploadedAt: new Date().toISOString()
+    };
+    setSelectedUploadDetails(currentUploadDetails);
 
     try {
       await new Promise((resolve) => window.setTimeout(resolve, 0));
@@ -106,11 +113,7 @@ export function WorkbookImporter() {
       setValidation(validationResult);
       setValidationFilters({ severity: "All", category: "All", worksheetName: "All" });
       setSelectedIssueId(null);
-      setUploadDetails({
-        fileName: file.name,
-        fileSize: file.size,
-        uploadedAt: new Date().toISOString()
-      });
+      setUploadDetails(currentUploadDetails);
       setSelectedWorksheetName(result.summary.worksheets[0]?.name ?? null);
     } catch (importError) {
       setWorkbook(null);
@@ -168,6 +171,12 @@ export function WorkbookImporter() {
           <div>
             <h2>Upload workbook</h2>
             <p className="muted">Drop an Excel workbook here, or browse for a .xlsx or .xlsm file. Legacy .xls files should be saved in a modern Excel format first.</p>
+            {selectedUploadDetails ? (
+              <div className="selectedWorkbook">
+                <strong>{selectedUploadDetails.fileName}</strong>
+                <span>{formatFileSize(selectedUploadDetails.fileSize)} selected {formatDateTime(selectedUploadDetails.uploadedAt)}</span>
+              </div>
+            ) : null}
             <div className="actions">
               <button className="primary" type="button" onClick={() => inputRef.current?.click()} disabled={isLoading}>
                 {isLoading ? <LoaderCircle aria-hidden="true" size={18} className="spinIcon" /> : <FileSpreadsheet aria-hidden="true" size={18} />}

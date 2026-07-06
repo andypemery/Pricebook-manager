@@ -18,6 +18,8 @@ Excel handling is isolated behind `lib/data-mapper/excel-import`. Validation is 
 
 The current implementation supports `.xlsx` and `.xlsm` workbooks through ExcelJS. Legacy binary `.xls` files are rejected with a friendly message asking users to save the workbook as `.xlsx` or `.xlsm`.
 
+The importer supports standard `.xlsx` and `.xlsm` workbooks that can be safely read by ExcelJS. Older or heavily modified customer spreadsheets may need to be opened in Excel and saved again as `.xlsx`. Legacy `.xls`, password-protected, encrypted, or structurally damaged workbooks are not supported in this version. A future repair or normalise workbook workflow can be considered if this becomes a frequent customer issue.
+
 ## Recommendation
 
 Keep the ExcelJS approach. Do not reintroduce npm `xlsx` unless Axiom explicitly accepts the advisory risk or adopts a patched non-npm SheetJS distribution after a separate security review.
