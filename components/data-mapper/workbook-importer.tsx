@@ -182,6 +182,9 @@ export function WorkbookImporter() {
                 {isLoading ? <LoaderCircle aria-hidden="true" size={18} className="spinIcon" /> : <FileSpreadsheet aria-hidden="true" size={18} />}
                 {isLoading ? "Importing" : "Browse for file"}
               </button>
+              <a className="secondary" href="/demo/Axiom_Data_Mapper_Demo_Pricebook_20000_Rows_exceljs.xlsx" download>
+                Demo workbook
+              </a>
             </div>
           </div>
           <input
