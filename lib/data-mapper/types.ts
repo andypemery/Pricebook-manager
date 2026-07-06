@@ -77,3 +77,39 @@ export type WorksheetPreview = {
   sourceRowCount: number;
   previewRowLimit: number;
 };
+
+export type ValidationSeverity = "Error" | "Warning";
+
+export type ValidationIssueCategory =
+  | "duplicate-sku"
+  | "missing-required-field"
+  | "price"
+  | "margin"
+  | "approval-status";
+
+export type ValidationIssue = {
+  id: string;
+  severity: ValidationSeverity;
+  category: ValidationIssueCategory;
+  worksheetName: string;
+  rowNumber: number;
+  sku: string | null;
+  field: string;
+  message: string;
+};
+
+export type ValidationSummary = {
+  totalRowsChecked: number;
+  totalErrors: number;
+  totalWarnings: number;
+  worksheetsWithIssues: number;
+  duplicateSkuCount: number;
+  missingRequiredFieldCount: number;
+  priceIssueCount: number;
+  marginIssueCount: number;
+};
+
+export type WorkbookValidationResult = {
+  summary: ValidationSummary;
+  issues: ValidationIssue[];
+};

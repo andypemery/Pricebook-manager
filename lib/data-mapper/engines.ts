@@ -17,7 +17,7 @@ export const dataMapperEngines: DataMapperEngineDefinition[] = [
     key: "validation",
     name: "Validation engine",
     purpose: "Apply required-field, data type and business-rule validation to imported rows.",
-    status: "placeholder"
+    status: "ready"
   },
   {
     key: "duplicateSku",

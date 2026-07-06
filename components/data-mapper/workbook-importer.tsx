@@ -3,8 +3,9 @@
 import { useMemo, useRef, useState } from "react";
 import type ExcelJS from "exceljs";
 import { ArrowDownUp, FileSpreadsheet, LoaderCircle, Search, Upload } from "lucide-react";
-import type { UploadedWorkbookDetails, WorkbookSummary, WorksheetPreview } from "@/lib/data-mapper/types";
+import type { UploadedWorkbookDetails, ValidationIssueCategory, ValidationSeverity, WorkbookSummary, WorkbookValidationResult, WorksheetPreview } from "@/lib/data-mapper/types";
 import { createWorksheetPreview, friendlyExcelImportMessage, readWorkbook } from "@/lib/data-mapper/excel-import";
+import { validateWorkbook } from "@/lib/data-mapper/validation";
 
 type SortDirection = "asc" | "desc";
 
@@ -12,6 +13,20 @@ type SortState = {
   columnIndex: number;
   direction: SortDirection;
 } | null;
+
+type ValidationFilters = {
+  severity: "All" | ValidationSeverity;
+  category: "All" | ValidationIssueCategory;
+  worksheetName: "All" | string;
+};
+
+const validationCategoryLabels: Record<ValidationIssueCategory, string> = {
+  "duplicate-sku": "Duplicate SKU",
+  "missing-required-field": "Missing required field",
+  price: "Price issue",
+  margin: "Margin issue",
+  "approval-status": "Approval status"
+};
 
 function formatFileSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
@@ -47,6 +62,9 @@ export function WorkbookImporter() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [workbook, setWorkbook] = useState<ExcelJS.Workbook | null>(null);
   const [summary, setSummary] = useState<WorkbookSummary | null>(null);
+  const [validation, setValidation] = useState<WorkbookValidationResult | null>(null);
+  const [validationFilters, setValidationFilters] = useState<ValidationFilters>({ severity: "All", category: "All", worksheetName: "All" });
+  const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
   const [uploadDetails, setUploadDetails] = useState<UploadedWorkbookDetails | null>(null);
   const [selectedWorksheetName, setSelectedWorksheetName] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
@@ -63,6 +81,15 @@ export function WorkbookImporter() {
     return createWorksheetPreview(selectedWorksheet.name, worksheet, selectedWorksheet);
   }, [selectedWorksheet, workbook]);
   const rows = useMemo(() => visibleRows(preview, searchTerm, sort), [preview, searchTerm, sort]);
+  const filteredIssues = useMemo(() => {
+    if (!validation) return [];
+    return validation.issues.filter((issue) => {
+      const severityMatch = validationFilters.severity === "All" || issue.severity === validationFilters.severity;
+      const categoryMatch = validationFilters.category === "All" || issue.category === validationFilters.category;
+      const worksheetMatch = validationFilters.worksheetName === "All" || issue.worksheetName === validationFilters.worksheetName;
+      return severityMatch && categoryMatch && worksheetMatch;
+    });
+  }, [validation, validationFilters]);
 
   async function handleFile(file: File) {
     setIsLoading(true);
@@ -73,8 +100,12 @@ export function WorkbookImporter() {
     try {
       await new Promise((resolve) => window.setTimeout(resolve, 0));
       const result = await readWorkbook(file);
+      const validationResult = validateWorkbook(result.workbook, result.summary);
       setWorkbook(result.workbook);
       setSummary(result.summary);
+      setValidation(validationResult);
+      setValidationFilters({ severity: "All", category: "All", worksheetName: "All" });
+      setSelectedIssueId(null);
       setUploadDetails({
         fileName: file.name,
         fileSize: file.size,
@@ -84,6 +115,7 @@ export function WorkbookImporter() {
     } catch (importError) {
       setWorkbook(null);
       setSummary(null);
+      setValidation(null);
       setUploadDetails(null);
       setSelectedWorksheetName(null);
       setError(friendlyExcelImportMessage(importError));
@@ -171,6 +203,30 @@ export function WorkbookImporter() {
               <div><strong>{summary.totalColumns.toLocaleString("en-GB")}</strong><span>Total columns</span></div>
             </div>
           </section>
+
+          {validation ? (
+            <section className="card">
+              <div className="sectionHeader">
+                <div>
+                  <h2>Validation summary</h2>
+                  <p className="muted">Sensible default checks run after import. Margin warning threshold is 20%.</p>
+                </div>
+                <span className={validation.summary.totalErrors > 0 ? "badge danger" : validation.summary.totalWarnings > 0 ? "badge warning" : "badge success"}>
+                  {validation.summary.totalErrors > 0 ? "Errors found" : validation.summary.totalWarnings > 0 ? "Warnings found" : "No issues"}
+                </span>
+              </div>
+              <div className="summaryGrid">
+                <div><strong>{validation.summary.totalRowsChecked.toLocaleString("en-GB")}</strong><span>Total rows checked</span></div>
+                <div><strong>{validation.summary.totalErrors.toLocaleString("en-GB")}</strong><span>Total errors</span></div>
+                <div><strong>{validation.summary.totalWarnings.toLocaleString("en-GB")}</strong><span>Total warnings</span></div>
+                <div><strong>{validation.summary.worksheetsWithIssues.toLocaleString("en-GB")}</strong><span>Worksheets with issues</span></div>
+                <div><strong>{validation.summary.duplicateSkuCount.toLocaleString("en-GB")}</strong><span>Duplicate SKUs</span></div>
+                <div><strong>{validation.summary.missingRequiredFieldCount.toLocaleString("en-GB")}</strong><span>Missing required fields</span></div>
+                <div><strong>{validation.summary.priceIssueCount.toLocaleString("en-GB")}</strong><span>Price issues</span></div>
+                <div><strong>{validation.summary.marginIssueCount.toLocaleString("en-GB")}</strong><span>Margin issues</span></div>
+              </div>
+            </section>
+          ) : null}
 
           <div className="workbookExplorerLayout">
             <section className="card">
@@ -262,6 +318,72 @@ export function WorkbookImporter() {
               </div>
             )}
           </section>
+
+          {validation ? (
+            <section className="card">
+              <div className="sectionHeader">
+                <div>
+                  <h2>Validation issues</h2>
+                  <p className="muted">{filteredIssues.length.toLocaleString("en-GB")} of {validation.issues.length.toLocaleString("en-GB")} issues shown.</p>
+                </div>
+                <div className="validationFilters">
+                  <label className="field">
+                    <span>Severity</span>
+                    <select value={validationFilters.severity} onChange={(event) => setValidationFilters((current) => ({ ...current, severity: event.target.value as ValidationFilters["severity"] }))}>
+                      <option>All</option>
+                      <option>Error</option>
+                      <option>Warning</option>
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>Issue type</span>
+                    <select value={validationFilters.category} onChange={(event) => setValidationFilters((current) => ({ ...current, category: event.target.value as ValidationFilters["category"] }))}>
+                      <option>All</option>
+                      {Object.entries(validationCategoryLabels).map(([category, label]) => (
+                        <option key={category} value={category}>{label}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>Worksheet</span>
+                    <select value={validationFilters.worksheetName} onChange={(event) => setValidationFilters((current) => ({ ...current, worksheetName: event.target.value }))}>
+                      <option>All</option>
+                      {summary.worksheets.map((worksheet) => (
+                        <option key={worksheet.name} value={worksheet.name}>{worksheet.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+              </div>
+
+              {filteredIssues.length > 0 ? (
+                <div className="previewTableWrap validationIssueWrap">
+                  <table className="previewTable validationIssueTable">
+                    <thead>
+                      <tr><th>Severity</th><th>Worksheet</th><th>Row</th><th>SKU</th><th>Field</th><th>Issue</th></tr>
+                    </thead>
+                    <tbody>
+                      {filteredIssues.map((issue) => (
+                        <tr className={selectedIssueId === issue.id ? "selectedIssue" : undefined} key={issue.id} onClick={() => setSelectedIssueId(issue.id)}>
+                          <td><span className={issue.severity === "Error" ? "badge danger" : "badge warning"}>{issue.severity}</span></td>
+                          <td>{issue.worksheetName}</td>
+                          <td>{issue.rowNumber}</td>
+                          <td>{issue.sku ?? "Not provided"}</td>
+                          <td>{issue.field}</td>
+                          <td>{issue.message}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="emptyState">
+                  <h2>No issues match these filters</h2>
+                  <p className="muted">Adjust the filters to review other validation results.</p>
+                </div>
+              )}
+            </section>
+          ) : null}
         </>
       ) : null}
     </>

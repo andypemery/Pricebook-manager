@@ -655,6 +655,22 @@ p { line-height: 1.6; }
   cursor: pointer;
 }
 .previewTable tbody tr:hover td { background: rgba(0, 199, 243, 0.04); }
+.validationFilters {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(160px, 1fr));
+  gap: 12px;
+  width: min(680px, 100%);
+}
+.validationFilters .field { margin: 0; }
+.validationIssueWrap { max-height: 520px; }
+.validationIssueTable { width: 100%; }
+.validationIssueTable th, .validationIssueTable td {
+  min-width: 120px;
+  max-width: 420px;
+  white-space: normal;
+}
+.validationIssueTable tbody tr { cursor: pointer; }
+.validationIssueTable .selectedIssue td { background: rgba(0, 199, 243, 0.1); }
 .pagination { display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap; padding-top: 14px; color: var(--text-muted); }
 .pageControls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .pageButton { border: 1px solid var(--border-soft); border-radius: 10px; padding: 8px 10px; text-decoration: none; color: var(--text-main); }
@@ -687,6 +703,7 @@ p { line-height: 1.6; }
   .workbookDropzone { align-items: flex-start; }
   .workbookExplorerLayout { grid-template-columns: 1fr; }
   .worksheetButton { align-items: flex-start; flex-direction: column; }
+  .validationFilters { grid-template-columns: 1fr; }
 }
 
 @media print {
