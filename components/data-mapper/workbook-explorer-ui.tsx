@@ -50,6 +50,14 @@ function worksheetIssueClassName({ errorCount, warningCount }: WorksheetIssueCou
   return "";
 }
 
+export function worksheetPreviewRowDescription(worksheet: WorksheetSummary, previewedRowCount: number) {
+  const sourceDataRowCount = worksheet.detectedHeaderRow === null
+    ? 0
+    : Math.max(0, worksheet.rowCount - worksheet.detectedHeaderRow);
+  const scope = previewedRowCount < sourceDataRowCount ? "first" : "all";
+  return `Showing ${scope} ${countLabel(previewedRowCount, "row")}`;
+}
+
 export function countWorksheetIssues(issues: readonly Pick<ValidationIssue, "worksheetName" | "severity">[]) {
   const issueCounts = new Map<string, WorksheetIssueCounts>();
 
@@ -176,7 +184,7 @@ export function SelectedWorksheetSummary({ worksheet, previewedRowCount, issueCo
           <span aria-hidden="true">·</span>
           <span>{worksheet.columnCount.toLocaleString("en-GB")} columns</span>
           <span aria-hidden="true">·</span>
-          <span>{previewedRowCount.toLocaleString("en-GB")} rows previewed</span>
+          <span>{worksheetPreviewRowDescription(worksheet, previewedRowCount)}</span>
           <span aria-hidden="true">·</span>
           <span>{worksheet.detectedHeaderRow === null ? "Header not detected" : `Header row ${worksheet.detectedHeaderRow.toLocaleString("en-GB")}`}</span>
         </p>

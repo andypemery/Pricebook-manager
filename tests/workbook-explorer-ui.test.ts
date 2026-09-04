@@ -7,7 +7,8 @@ import {
   SelectedWorksheetSummary,
   WorksheetTabs,
   countWorksheetIssues,
-  nextWorksheetTabIndex
+  nextWorksheetTabIndex,
+  worksheetPreviewRowDescription
 } from "../components/data-mapper/workbook-explorer-ui";
 import type { WorksheetSummary } from "../lib/data-mapper/types";
 
@@ -76,9 +77,16 @@ describe("Workbook Explorer UI", () => {
     expect(markup).toContain("Pricebook 4");
     expect(markup).toContain("2,500 rows");
     expect(markup).toContain("12 columns");
-    expect(markup).toContain("100 rows previewed");
+    expect(markup).toContain("Showing first 100 rows");
     expect(markup).toContain("No issues found");
     expect(markup).not.toContain("badge danger");
+  });
+
+  it("states when every worksheet data row is shown", () => {
+    const smallWorksheet = worksheet("Small sheet", 43, 12);
+
+    expect(worksheetPreviewRowDescription(smallWorksheet, 42)).toBe("Showing all 42 rows");
+    expect(worksheetPreviewRowDescription(worksheet("Single row", 2, 12), 1)).toBe("Showing all 1 row");
   });
 
   it("derives per-sheet counts once from the canonical validation issue list", () => {

@@ -40,4 +40,29 @@ describe("validation engine", () => {
     expect(result.issues[0]?.severity).toBe("Warning");
     expect(result.issues[0]?.message).toBe("Margin is below the 10% threshold.");
   });
+
+  it("validates worksheet rows beyond the 100-row preview limit", () => {
+    const workbook = workbookFromRows([
+      ["SKU", "Item description", "Cost price", "Sell price", "Framework", "Partner", "Approval status"],
+      ...Array.from({ length: 100 }, (_, index) => [
+        `SKU-${index + 1}`,
+        `Product ${index + 1}`,
+        50,
+        100,
+        "NHS Framework",
+        "Partner A",
+        "Approved"
+      ]),
+      ["SKU-101", "Product 101", 50, 100, "NHS Framework", "Partner A", "Not a valid status"]
+    ]);
+    const summary = createWorkbookSummary(workbook, "pricebook.xlsx");
+    const result = validateWorkbook(workbook, summary);
+
+    expect(result.summary.totalRowsChecked).toBe(101);
+    expect(result.issues).toContainEqual(expect.objectContaining({
+      rowNumber: 102,
+      field: "Approval status",
+      message: "Approval status is not recognised."
+    }));
+  });
 });
