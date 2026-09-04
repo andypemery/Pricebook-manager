@@ -570,6 +570,15 @@ p { line-height: 1.6; }
   gap: 4px;
   margin-top: 10px;
   color: var(--text-main);
+  min-width: 0;
+}
+.workbookDropzone > div { flex: 1 1 auto; min-width: 0; max-width: 100%; }
+.selectedWorkbook strong {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .selectedWorkbook span {
   color: var(--text-muted);
@@ -577,29 +586,144 @@ p { line-height: 1.6; }
 }
 .spinIcon { animation: spin 850ms linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
-.workbookExplorerLayout { display: grid; grid-template-columns: minmax(280px, 0.85fr) minmax(0, 1.15fr); gap: 20px; align-items: start; }
-.worksheetList { display: grid; gap: 10px; }
-.worksheetButton {
-  width: 100%;
-  border: 1px solid var(--border-soft);
-  border-radius: 14px;
-  background: var(--surface-panel);
-  color: var(--text-main);
-  padding: 14px;
+.workbookSummaryCard, .workbookPreviewCard { min-width: 0; }
+.workbookSummaryCard { padding: 16px 20px; }
+.compactWorkbookSummary {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px 24px;
+  min-width: 0;
+}
+.workbookSummaryIdentity {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  flex: 1 1 360px;
+}
+.workbookSummaryLabel {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.workbookSummaryName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.workbookSummaryMetrics {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+.worksheetTabsScroller {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-bottom: 1px solid var(--border-soft);
+  scrollbar-width: thin;
+}
+.worksheetTabs {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  min-width: max-content;
+  padding: 2px 2px 0;
+}
+.worksheetTab {
+  flex: 0 0 auto;
+  min-width: 126px;
+  max-width: 240px;
+  border: 1px solid var(--border-soft);
+  border-bottom: 0;
+  border-radius: 10px 10px 0 0;
+  background: var(--surface-panel);
+  color: var(--text-main);
+  padding: 10px 14px;
   text-align: left;
   cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
 }
-.worksheetButton strong, .worksheetButton small { display: block; }
-.worksheetButton small { color: var(--text-muted); margin-top: 4px; }
-.worksheetButton:hover, .worksheetButton:focus-visible, .worksheetButton.active {
+.worksheetTabName {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.worksheetTab:hover, .worksheetTab:focus-visible {
   border-color: rgba(0, 236, 227, 0.48);
+  background: rgba(0, 199, 243, 0.1);
   outline: none;
 }
-.worksheetButton.active { box-shadow: inset 3px 0 0 var(--axiom-blue); }
+.worksheetTab:focus-visible { box-shadow: var(--focus-ring); }
+.worksheetTab[aria-selected="true"] {
+  border-color: rgba(0, 236, 227, 0.62);
+  background: linear-gradient(180deg, rgba(0, 199, 243, 0.2), rgba(0, 199, 243, 0.08));
+  color: var(--axiom-aqua);
+  font-weight: 800;
+  box-shadow: inset 0 3px 0 var(--axiom-blue);
+}
+.worksheetPreviewPanel {
+  min-width: 0;
+  outline: none;
+}
+.worksheetPreviewPanel:focus-visible { box-shadow: var(--focus-ring); }
+.selectedWorksheetSummary {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px 20px;
+  min-width: 0;
+  margin-bottom: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--border-soft);
+  border-top: 0;
+  border-radius: 0 0 14px 14px;
+  background: var(--surface-panel);
+}
+.selectedWorksheetDetails { flex: 1 1 auto; min-width: 0; }
+.selectedWorksheetTitle {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.selectedWorksheetTitle span {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.selectedWorksheetTitle strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.selectedWorksheetMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin: 5px 0 0;
+  color: var(--text-muted);
+  font-size: 0.88rem;
+}
+.selectedWorksheetMessage {
+  margin: 8px 0 0;
+  color: var(--text-muted);
+  font-size: 0.88rem;
+}
 .searchBox {
   min-height: 42px;
   border: 1px solid var(--border-soft);
@@ -710,9 +834,16 @@ p { line-height: 1.6; }
   .splitHero .actions { margin-top: 16px; }
   .dashboardLayout { grid-template-columns: 1fr; }
   .uploadPanel { align-items: flex-start; }
-  .workbookDropzone { align-items: flex-start; }
-  .workbookExplorerLayout { grid-template-columns: 1fr; }
-  .worksheetButton { align-items: flex-start; flex-direction: column; }
+  .workbookDropzone { align-items: flex-start; flex-direction: column; }
+  .workbookDropzone > div { width: 100%; }
+  .compactWorkbookSummary { align-items: flex-start; flex-direction: column; }
+  .workbookSummaryIdentity, .workbookSummaryMetrics { flex: 0 1 auto; width: 100%; }
+  .workbookPreviewHeader { align-items: stretch; }
+  .workbookPreviewHeader .searchBox { width: 100%; }
+  .workbookPreviewHeader .searchBox input { min-width: 0; width: 100%; }
+  .worksheetTab { min-width: 112px; max-width: 200px; }
+  .selectedWorksheetSummary { flex-direction: column; }
+  .selectedWorksheetDetails { width: 100%; }
   .validationFilters { grid-template-columns: 1fr; }
 }
 

@@ -6,6 +6,13 @@ import { ArrowDownUp, FileSpreadsheet, LoaderCircle, Search, Upload } from "luci
 import type { UploadedWorkbookDetails, ValidationIssueCategory, ValidationSeverity, WorkbookSummary, WorkbookValidationResult, WorksheetPreview } from "@/lib/data-mapper/types";
 import { createWorksheetPreview, friendlyExcelImportMessage, readWorkbook } from "@/lib/data-mapper/excel-import";
 import { validateWorkbook } from "@/lib/data-mapper/validation";
+import {
+  CompactWorkbookSummary,
+  SelectedWorksheetSummary,
+  WorksheetTabs,
+  worksheetPreviewPanelId,
+  worksheetTabId
+} from "@/components/data-mapper/workbook-explorer-ui";
 
 type SortDirection = "asc" | "desc";
 
@@ -140,6 +147,12 @@ export function WorkbookImporter() {
     });
   }
 
+  function selectWorksheet(worksheetName: string) {
+    setSelectedWorksheetName(worksheetName);
+    setSearchTerm("");
+    setSort(null);
+  }
+
   return (
     <>
       <section className="hero">
@@ -173,8 +186,8 @@ export function WorkbookImporter() {
             <p className="muted">Drop an Excel workbook here, or browse for a .xlsx or .xlsm file. Legacy .xls files should be saved in a modern Excel format first.</p>
             {selectedUploadDetails ? (
               <div className="selectedWorkbook">
-                <strong>{selectedUploadDetails.fileName}</strong>
-                <span>{formatFileSize(selectedUploadDetails.fileSize)} selected {formatDateTime(selectedUploadDetails.uploadedAt)}</span>
+                <strong title={selectedUploadDetails.fileName}>{selectedUploadDetails.fileName}</strong>
+                <span>{formatFileSize(selectedUploadDetails.fileSize)} · Selected {formatDateTime(selectedUploadDetails.uploadedAt)}</span>
               </div>
             ) : null}
             <div className="actions">
@@ -200,21 +213,13 @@ export function WorkbookImporter() {
 
       {summary && uploadDetails ? (
         <>
-          <section className="card">
-            <div className="sectionHeader">
-              <h2>Upload summary</h2>
-              <span className="badge">{summary.worksheetCount} worksheets</span>
-            </div>
-            <div className="summaryGrid">
-              <div><strong>{uploadDetails.fileName}</strong><span>Filename</span></div>
-              <div><strong>{formatFileSize(uploadDetails.fileSize)}</strong><span>File size</span></div>
-              <div><strong>{formatDateTime(uploadDetails.uploadedAt)}</strong><span>Upload time</span></div>
-              <div><strong>{summary.workbookName}</strong><span>Workbook name</span></div>
-              <div><strong>{summary.worksheetCount.toLocaleString("en-GB")}</strong><span>Worksheets</span></div>
-              <div><strong>{summary.totalRows.toLocaleString("en-GB")}</strong><span>Total rows</span></div>
-              <div><strong>{summary.totalColumns.toLocaleString("en-GB")}</strong><span>Total columns</span></div>
-            </div>
-          </section>
+          <CompactWorkbookSummary
+            fileName={uploadDetails.fileName}
+            fileSize={formatFileSize(uploadDetails.fileSize)}
+            worksheetCount={summary.worksheetCount}
+            totalRows={summary.totalRows}
+            totalColumns={summary.totalColumns}
+          />
 
           {validation ? (
             <section className="card">
@@ -240,95 +245,69 @@ export function WorkbookImporter() {
             </section>
           ) : null}
 
-          <div className="workbookExplorerLayout">
-            <section className="card">
-              <div className="sectionHeader">
-                <h2>Workbook</h2>
-                <span className="muted">{summary.workbookName}</span>
-              </div>
-              <div className="worksheetList">
-                {summary.worksheets.map((worksheet) => (
-                  <button
-                    className={worksheet.name === selectedWorksheetName ? "worksheetButton active" : "worksheetButton"}
-                    key={worksheet.name}
-                    type="button"
-                    onClick={() => {
-                      setSelectedWorksheetName(worksheet.name);
-                      setSearchTerm("");
-                      setSort(null);
-                    }}
-                  >
-                    <span>
-                      <strong>{worksheet.name}</strong>
-                      <small>{worksheet.rowCount.toLocaleString("en-GB")} rows, {worksheet.columnCount.toLocaleString("en-GB")} columns</small>
-                    </span>
-                    <span className={worksheet.importStatus === "Ready" ? "badge success" : "badge warning"}>{worksheet.importStatus}</span>
-                  </button>
-                ))}
-              </div>
-            </section>
-
-            <section className="card">
-              <div className="sectionHeader">
-                <h2>Worksheet information</h2>
-                {selectedWorksheet ? <span className="badge">{selectedWorksheet.importStatus}</span> : null}
-              </div>
-              {selectedWorksheet ? (
-                <div className="summaryGrid">
-                  <div><strong>{selectedWorksheet.name}</strong><span>Worksheet name</span></div>
-                  <div><strong>{selectedWorksheet.rowCount.toLocaleString("en-GB")}</strong><span>Rows</span></div>
-                  <div><strong>{selectedWorksheet.columnCount.toLocaleString("en-GB")}</strong><span>Columns</span></div>
-                  <div><strong>{selectedWorksheet.detectedHeaderRow ?? "None"}</strong><span>Detected header row</span></div>
-                </div>
-              ) : null}
-              {selectedWorksheet?.message ? <p className="muted">{selectedWorksheet.message}</p> : null}
-            </section>
-          </div>
-
-          <section className="card">
-            <div className="sectionHeader">
+          <section className="card workbookPreviewCard">
+            <div className="sectionHeader workbookPreviewHeader">
               <div>
                 <h2>Worksheet preview</h2>
-                <p className="muted">Showing up to {preview?.previewRowLimit ?? 100} rows from {preview?.sourceRowCount.toLocaleString("en-GB") ?? 0} source rows.</p>
+                <p className="muted">Choose a worksheet to inspect its first {preview?.previewRowLimit ?? 100} data rows.</p>
               </div>
               <label className="searchBox">
                 <Search aria-hidden="true" size={18} />
+                <span className="visuallyHidden">Search worksheet preview</span>
                 <input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Search preview" />
               </label>
             </div>
 
-            {preview && preview.headers.length > 0 ? (
-              <div className="previewTableWrap">
-                <table className="previewTable">
-                  <thead>
-                    <tr>
-                      {preview.headers.map((header, index) => (
-                        <th key={`${header}-${index}`}>
-                          <button type="button" onClick={() => updateSort(index)}>
-                            <span>{header}</span>
-                            <ArrowDownUp aria-hidden="true" size={14} />
-                          </button>
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map((row, rowIndex) => (
-                      <tr key={`${selectedWorksheetName}-${rowIndex}`}>
-                        {preview.headers.map((header, columnIndex) => (
-                          <td key={`${header}-${columnIndex}`}>{row[columnIndex]}</td>
+            <WorksheetTabs
+              worksheets={summary.worksheets}
+              selectedWorksheetName={selectedWorksheetName}
+              onSelectWorksheet={selectWorksheet}
+            />
+
+            <div
+              aria-labelledby={worksheetTabId(Math.max(0, summary.worksheets.findIndex((worksheet) => worksheet.name === selectedWorksheetName)))}
+              className="worksheetPreviewPanel"
+              id={worksheetPreviewPanelId}
+              role="tabpanel"
+              tabIndex={0}
+            >
+              {selectedWorksheet ? (
+                <SelectedWorksheetSummary worksheet={selectedWorksheet} previewedRowCount={preview?.rows.length ?? 0} />
+              ) : null}
+
+              {preview && preview.headers.length > 0 ? (
+                <div className="previewTableWrap">
+                  <table className="previewTable">
+                    <thead>
+                      <tr>
+                        {preview.headers.map((header, index) => (
+                          <th key={`${header}-${index}`}>
+                            <button type="button" onClick={() => updateSort(index)}>
+                              <span>{header}</span>
+                              <ArrowDownUp aria-hidden="true" size={14} />
+                            </button>
+                          </th>
                         ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="emptyState">
-                <h2>No preview available</h2>
-                <p className="muted">Select a worksheet with detected headers and data rows.</p>
-              </div>
-            )}
+                    </thead>
+                    <tbody>
+                      {rows.map((row, rowIndex) => (
+                        <tr key={`${selectedWorksheetName}-${rowIndex}`}>
+                          {preview.headers.map((header, columnIndex) => (
+                            <td key={`${header}-${columnIndex}`}>{row[columnIndex]}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="emptyState">
+                  <h2>No preview available</h2>
+                  <p className="muted">Select a worksheet with detected headers and data rows.</p>
+                </div>
+              )}
+            </div>
           </section>
 
           {validation ? (
