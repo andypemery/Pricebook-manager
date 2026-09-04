@@ -1,7 +1,12 @@
 "use client";
 
 import { useRef, type KeyboardEvent } from "react";
-import type { WorksheetSummary } from "@/lib/data-mapper/types";
+import type { ValidationIssue, WorksheetSummary } from "@/lib/data-mapper/types";
+
+export type WorksheetIssueCounts = {
+  errorCount: number;
+  warningCount: number;
+};
 
 type CompactWorkbookSummaryProps = {
   fileName: string;
@@ -14,15 +19,49 @@ type CompactWorkbookSummaryProps = {
 type WorksheetTabsProps = {
   worksheets: WorksheetSummary[];
   selectedWorksheetName: string | null;
+  issueCountsByWorksheet: ReadonlyMap<string, WorksheetIssueCounts>;
   onSelectWorksheet: (worksheetName: string) => void;
 };
 
 type SelectedWorksheetSummaryProps = {
   worksheet: WorksheetSummary;
   previewedRowCount: number;
+  issueCounts?: WorksheetIssueCounts;
 };
 
 export const worksheetPreviewPanelId = "worksheet-preview-panel";
+const noWorksheetIssues: WorksheetIssueCounts = { errorCount: 0, warningCount: 0 };
+
+function countLabel(count: number, singular: string) {
+  return `${count.toLocaleString("en-GB")} ${singular}${count === 1 ? "" : "s"}`;
+}
+
+function worksheetIssueDescription({ errorCount, warningCount }: WorksheetIssueCounts) {
+  const descriptions: string[] = [];
+  if (errorCount > 0) descriptions.push(countLabel(errorCount, "error"));
+  if (warningCount > 0) descriptions.push(countLabel(warningCount, "warning"));
+  return descriptions.length > 0 ? descriptions.join(", ") : "No validation issues";
+}
+
+function worksheetIssueClassName({ errorCount, warningCount }: WorksheetIssueCounts) {
+  if (errorCount > 0 && warningCount > 0) return "hasErrorsAndWarnings";
+  if (errorCount > 0) return "hasErrors";
+  if (warningCount > 0) return "hasWarnings";
+  return "";
+}
+
+export function countWorksheetIssues(issues: readonly Pick<ValidationIssue, "worksheetName" | "severity">[]) {
+  const issueCounts = new Map<string, WorksheetIssueCounts>();
+
+  for (const issue of issues) {
+    const current = issueCounts.get(issue.worksheetName) ?? { errorCount: 0, warningCount: 0 };
+    if (issue.severity === "Error") current.errorCount += 1;
+    if (issue.severity === "Warning") current.warningCount += 1;
+    issueCounts.set(issue.worksheetName, current);
+  }
+
+  return issueCounts;
+}
 
 export function worksheetTabId(index: number) {
   return `worksheet-tab-${index}`;
@@ -66,7 +105,7 @@ export function CompactWorkbookSummary({
   );
 }
 
-export function WorksheetTabs({ worksheets, selectedWorksheetName, onSelectWorksheet }: WorksheetTabsProps) {
+export function WorksheetTabs({ worksheets, selectedWorksheetName, issueCountsByWorksheet, onSelectWorksheet }: WorksheetTabsProps) {
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   function handleKeyDown(event: KeyboardEvent<HTMLButtonElement>, currentIndex: number) {
@@ -82,15 +121,19 @@ export function WorksheetTabs({ worksheets, selectedWorksheetName, onSelectWorks
   }
 
   return (
-    <div className="worksheetTabsScroller">
+    <div className="worksheetTabsWrap">
       <div className="worksheetTabs" role="tablist" aria-label="Workbook worksheets">
         {worksheets.map((worksheet, index) => {
           const isSelected = worksheet.name === selectedWorksheetName;
+          const issueCounts = issueCountsByWorksheet.get(worksheet.name) ?? noWorksheetIssues;
+          const issueClassName = worksheetIssueClassName(issueCounts);
+          const issueDescription = worksheetIssueDescription(issueCounts);
           return (
             <button
               aria-controls={worksheetPreviewPanelId}
+              aria-label={`${worksheet.name} — ${issueDescription}`}
               aria-selected={isSelected}
-              className="worksheetTab"
+              className={issueClassName ? `worksheetTab ${issueClassName}` : "worksheetTab"}
               id={worksheetTabId(index)}
               key={worksheet.name}
               onClick={() => onSelectWorksheet(worksheet.name)}
@@ -100,10 +143,16 @@ export function WorksheetTabs({ worksheets, selectedWorksheetName, onSelectWorks
               }}
               role="tab"
               tabIndex={isSelected ? 0 : -1}
-              title={worksheet.name}
+              title={`${worksheet.name} — ${issueDescription}`}
               type="button"
             >
               <span className="worksheetTabName">{worksheet.name}</span>
+              {issueCounts.errorCount > 0 || issueCounts.warningCount > 0 ? (
+                <span className="worksheetTabIssueCounts" aria-hidden="true">
+                  {issueCounts.errorCount > 0 ? <span className="worksheetTabIssueCount errorIssueCount">{countLabel(issueCounts.errorCount, "error")}</span> : null}
+                  {issueCounts.warningCount > 0 ? <span className="worksheetTabIssueCount warningIssueCount">{countLabel(issueCounts.warningCount, "warning")}</span> : null}
+                </span>
+              ) : null}
             </button>
           );
         })}
@@ -112,7 +161,9 @@ export function WorksheetTabs({ worksheets, selectedWorksheetName, onSelectWorks
   );
 }
 
-export function SelectedWorksheetSummary({ worksheet, previewedRowCount }: SelectedWorksheetSummaryProps) {
+export function SelectedWorksheetSummary({ worksheet, previewedRowCount, issueCounts = noWorksheetIssues }: SelectedWorksheetSummaryProps) {
+  const hasValidationIssues = issueCounts.errorCount > 0 || issueCounts.warningCount > 0;
+
   return (
     <div className="selectedWorksheetSummary">
       <div className="selectedWorksheetDetails">
@@ -131,7 +182,16 @@ export function SelectedWorksheetSummary({ worksheet, previewedRowCount }: Selec
         </p>
         {worksheet.message ? <p className="selectedWorksheetMessage">{worksheet.message}</p> : null}
       </div>
-      <span className={worksheet.importStatus === "Ready" ? "badge success" : "badge warning"}>{worksheet.importStatus}</span>
+      <div
+        aria-label={`Selected worksheet validation: ${worksheetIssueDescription(issueCounts)}`}
+        aria-live="polite"
+        className="selectedWorksheetIndicators"
+      >
+        {issueCounts.errorCount > 0 ? <span className="badge danger">Errors: {issueCounts.errorCount.toLocaleString("en-GB")}</span> : null}
+        {issueCounts.warningCount > 0 ? <span className="badge warning">Warnings: {issueCounts.warningCount.toLocaleString("en-GB")}</span> : null}
+        {!hasValidationIssues ? <span className="badge success">No issues found</span> : null}
+        <span aria-label={`Import status: ${worksheet.importStatus}`} className={worksheet.importStatus === "Ready" ? "badge success" : "badge warning"}>{worksheet.importStatus}</span>
+      </div>
     </div>
   );
 }

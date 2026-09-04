@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
@@ -5,6 +6,7 @@ import {
   CompactWorkbookSummary,
   SelectedWorksheetSummary,
   WorksheetTabs,
+  countWorksheetIssues,
   nextWorksheetTabIndex
 } from "../components/data-mapper/workbook-explorer-ui";
 import type { WorksheetSummary } from "../lib/data-mapper/types";
@@ -46,13 +48,14 @@ describe("Workbook Explorer UI", () => {
     const markup = renderToStaticMarkup(createElement(WorksheetTabs, {
       worksheets,
       selectedWorksheetName: "Pricebook 4",
+      issueCountsByWorksheet: new Map(),
       onSelectWorksheet: vi.fn()
     }));
 
     expect(markup.match(/role="tab"/g)).toHaveLength(10);
     expect(markup).toContain("role=\"tablist\"");
     expect(markup).toContain("aria-selected=\"true\"");
-    expect(markup).toContain("title=\"Regional Enterprise Pricebook 9\"");
+    expect(markup).toContain('title="Regional Enterprise Pricebook 9 — No validation issues"');
   });
 
   it("supports standard arrow, Home and End worksheet-tab navigation", () => {
@@ -74,5 +77,78 @@ describe("Workbook Explorer UI", () => {
     expect(markup).toContain("2,500 rows");
     expect(markup).toContain("12 columns");
     expect(markup).toContain("100 rows previewed");
+    expect(markup).toContain("No issues found");
+    expect(markup).not.toContain("badge danger");
+  });
+
+  it("derives per-sheet counts once from the canonical validation issue list", () => {
+    const counts = countWorksheetIssues([
+      { worksheetName: "Errors only", severity: "Error" },
+      { worksheetName: "Errors only", severity: "Error" },
+      { worksheetName: "Warnings only", severity: "Warning" },
+      { worksheetName: "Both", severity: "Error" },
+      { worksheetName: "Both", severity: "Warning" }
+    ]);
+
+    expect(counts.get("Errors only")).toEqual({ errorCount: 2, warningCount: 0 });
+    expect(counts.get("Warnings only")).toEqual({ errorCount: 0, warningCount: 1 });
+    expect(counts.get("Both")).toEqual({ errorCount: 1, warningCount: 1 });
+    expect(counts.has("Clean")).toBe(false);
+  });
+
+  it("updates the compact issue summary for the selected worksheet", () => {
+    const errorsMarkup = renderToStaticMarkup(createElement(SelectedWorksheetSummary, {
+      worksheet: worksheet("Errors only"),
+      previewedRowCount: 100,
+      issueCounts: { errorCount: 14, warningCount: 0 }
+    }));
+    const bothMarkup = renderToStaticMarkup(createElement(SelectedWorksheetSummary, {
+      worksheet: worksheet("Both"),
+      previewedRowCount: 100,
+      issueCounts: { errorCount: 3, warningCount: 7 }
+    }));
+
+    expect(errorsMarkup).toContain("Errors: 14");
+    expect(errorsMarkup).not.toContain("Warnings:");
+    expect(bothMarkup).toContain("Errors: 3");
+    expect(bothMarkup).toContain("Warnings: 7");
+    expect(bothMarkup).toContain("Selected worksheet validation: 3 errors, 7 warnings");
+  });
+
+  it("renders clean, error, warning and combined tab states with accessible counts", () => {
+    const worksheets = [worksheet("Clean"), worksheet("Errors only"), worksheet("Warnings only"), worksheet("Both")];
+    const issueCountsByWorksheet = new Map([
+      ["Errors only", { errorCount: 2, warningCount: 0 }],
+      ["Warnings only", { errorCount: 0, warningCount: 4 }],
+      ["Both", { errorCount: 3, warningCount: 5 }]
+    ]);
+    const markup = renderToStaticMarkup(createElement(WorksheetTabs, {
+      worksheets,
+      selectedWorksheetName: "Both",
+      issueCountsByWorksheet,
+      onSelectWorksheet: vi.fn()
+    }));
+
+    expect(markup).toContain('class="worksheetTab"');
+    expect(markup).toContain('class="worksheetTab hasErrors"');
+    expect(markup).toContain('class="worksheetTab hasWarnings"');
+    expect(markup).toContain('class="worksheetTab hasErrorsAndWarnings"');
+    expect(markup).toContain('aria-label="Clean — No validation issues"');
+    expect(markup).toContain('aria-label="Errors only — 2 errors"');
+    expect(markup).toContain('aria-label="Warnings only — 4 warnings"');
+    expect(markup).toContain('aria-label="Both — 3 errors, 5 warnings"');
+    expect(markup).toContain("2 errors");
+    expect(markup).toContain("4 warnings");
+  });
+
+  it("configures worksheet navigation to wrap without a horizontal scrollbar", () => {
+    const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+    const tabsRule = css.match(/\.worksheetTabs\s*\{([^}]*)\}/)?.[1] ?? "";
+    const wrapperRule = css.match(/\.worksheetTabsWrap\s*\{([^}]*)\}/)?.[1] ?? "";
+
+    expect(tabsRule).toMatch(/flex-wrap:\s*wrap/);
+    expect(tabsRule).toMatch(/min-width:\s*0/);
+    expect(wrapperRule).not.toMatch(/overflow-x:\s*auto/);
+    expect(css).not.toContain("worksheetTabsScroller");
   });
 });

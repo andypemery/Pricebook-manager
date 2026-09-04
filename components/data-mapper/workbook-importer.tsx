@@ -10,6 +10,7 @@ import {
   CompactWorkbookSummary,
   SelectedWorksheetSummary,
   WorksheetTabs,
+  countWorksheetIssues,
   worksheetPreviewPanelId,
   worksheetTabId
 } from "@/components/data-mapper/workbook-explorer-ui";
@@ -89,6 +90,7 @@ export function WorkbookImporter() {
     return createWorksheetPreview(selectedWorksheet.name, worksheet, selectedWorksheet);
   }, [selectedWorksheet, workbook]);
   const rows = useMemo(() => visibleRows(preview, searchTerm, sort), [preview, searchTerm, sort]);
+  const issueCountsByWorksheet = useMemo(() => countWorksheetIssues(validation?.issues ?? []), [validation]);
   const filteredIssues = useMemo(() => {
     if (!validation) return [];
     return validation.issues.filter((issue) => {
@@ -261,6 +263,7 @@ export function WorkbookImporter() {
             <WorksheetTabs
               worksheets={summary.worksheets}
               selectedWorksheetName={selectedWorksheetName}
+              issueCountsByWorksheet={issueCountsByWorksheet}
               onSelectWorksheet={selectWorksheet}
             />
 
@@ -272,7 +275,11 @@ export function WorkbookImporter() {
               tabIndex={0}
             >
               {selectedWorksheet ? (
-                <SelectedWorksheetSummary worksheet={selectedWorksheet} previewedRowCount={preview?.rows.length ?? 0} />
+                <SelectedWorksheetSummary
+                  worksheet={selectedWorksheet}
+                  previewedRowCount={preview?.rows.length ?? 0}
+                  issueCounts={issueCountsByWorksheet.get(selectedWorksheet.name)}
+                />
               ) : null}
 
               {preview && preview.headers.length > 0 ? (

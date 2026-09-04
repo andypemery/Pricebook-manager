@@ -625,30 +625,29 @@ p { line-height: 1.6; }
   color: var(--text-muted);
   font-size: 0.9rem;
 }
-.worksheetTabsScroller {
+.worksheetTabsWrap {
   max-width: 100%;
-  overflow-x: auto;
-  overflow-y: hidden;
-  border-bottom: 1px solid var(--border-soft);
-  scrollbar-width: thin;
 }
 .worksheetTabs {
   display: flex;
-  align-items: flex-end;
-  gap: 6px;
-  min-width: max-content;
-  padding: 2px 2px 0;
+  align-items: stretch;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+  padding: 2px 0 10px;
 }
 .worksheetTab {
   flex: 0 0 auto;
   min-width: 126px;
   max-width: 240px;
   border: 1px solid var(--border-soft);
-  border-bottom: 0;
-  border-radius: 10px 10px 0 0;
+  border-radius: 10px;
   background: var(--surface-panel);
   color: var(--text-main);
   padding: 10px 14px;
+  display: grid;
+  align-content: start;
+  gap: 6px;
   text-align: left;
   cursor: pointer;
   transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
@@ -664,13 +663,58 @@ p { line-height: 1.6; }
   background: rgba(0, 199, 243, 0.1);
   outline: none;
 }
-.worksheetTab:focus-visible { box-shadow: var(--focus-ring); }
+.worksheetTab:focus-visible { outline: 2px solid var(--axiom-aqua); outline-offset: 2px; }
+.worksheetTab.hasErrors {
+  border-color: rgba(239, 68, 68, 0.38);
+  background: linear-gradient(180deg, rgba(239, 68, 68, 0.15), rgba(239, 68, 68, 0.06));
+}
+.worksheetTab.hasWarnings {
+  border-color: rgba(251, 191, 36, 0.4);
+  background: linear-gradient(180deg, rgba(251, 191, 36, 0.15), rgba(251, 191, 36, 0.06));
+}
+.worksheetTab.hasErrorsAndWarnings {
+  border-color: rgba(251, 191, 36, 0.4);
+  background: linear-gradient(90deg, rgba(239, 68, 68, 0.15) 0 50%, rgba(251, 191, 36, 0.15) 50% 100%);
+}
 .worksheetTab[aria-selected="true"] {
   border-color: rgba(0, 236, 227, 0.62);
-  background: linear-gradient(180deg, rgba(0, 199, 243, 0.2), rgba(0, 199, 243, 0.08));
   color: var(--axiom-aqua);
   font-weight: 800;
-  box-shadow: inset 0 3px 0 var(--axiom-blue);
+  box-shadow: inset 0 3px 0 var(--axiom-blue), 0 0 0 1px rgba(0, 236, 227, 0.28);
+}
+.worksheetTab[aria-selected="true"]:not(.hasErrors):not(.hasWarnings):not(.hasErrorsAndWarnings) {
+  background: linear-gradient(180deg, rgba(0, 199, 243, 0.2), rgba(0, 199, 243, 0.08));
+}
+.worksheetTabIssueCounts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.worksheetTabIssueCount {
+  border: 1px solid;
+  border-radius: 999px;
+  padding: 2px 6px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  line-height: 1.2;
+}
+.errorIssueCount {
+  border-color: rgba(239, 68, 68, 0.42);
+  background: rgba(239, 68, 68, 0.13);
+  color: #fecaca;
+}
+.warningIssueCount {
+  border-color: rgba(251, 191, 36, 0.44);
+  background: rgba(251, 191, 36, 0.13);
+  color: #fde68a;
+}
+.theme-light .worksheetTab[aria-selected="true"] { color: var(--axiom-navy); }
+.theme-light .errorIssueCount, .theme-light .selectedWorksheetIndicators .danger { color: #991b1b; }
+.theme-light .warningIssueCount, .theme-light .selectedWorksheetIndicators .warning { color: #854d0e; }
+@media (prefers-color-scheme: light) {
+  .theme-system .worksheetTab[aria-selected="true"] { color: var(--axiom-navy); }
+  .theme-system .errorIssueCount, .theme-system .selectedWorksheetIndicators .danger { color: #991b1b; }
+  .theme-system .warningIssueCount, .theme-system .selectedWorksheetIndicators .warning { color: #854d0e; }
 }
 .worksheetPreviewPanel {
   min-width: 0;
@@ -686,8 +730,7 @@ p { line-height: 1.6; }
   margin-bottom: 14px;
   padding: 14px 16px;
   border: 1px solid var(--border-soft);
-  border-top: 0;
-  border-radius: 0 0 14px 14px;
+  border-radius: 14px;
   background: var(--surface-panel);
 }
 .selectedWorksheetDetails { flex: 1 1 auto; min-width: 0; }
@@ -723,6 +766,14 @@ p { line-height: 1.6; }
   margin: 8px 0 0;
   color: var(--text-muted);
   font-size: 0.88rem;
+}
+.selectedWorksheetIndicators {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 .searchBox {
   min-height: 42px;
@@ -844,6 +895,7 @@ p { line-height: 1.6; }
   .worksheetTab { min-width: 112px; max-width: 200px; }
   .selectedWorksheetSummary { flex-direction: column; }
   .selectedWorksheetDetails { width: 100%; }
+  .selectedWorksheetIndicators { justify-content: flex-start; width: 100%; }
   .validationFilters { grid-template-columns: 1fr; }
 }
 
