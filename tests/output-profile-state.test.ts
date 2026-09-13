@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   addSourceColumn,
+  addStaticColumn,
   mappedSourceColumnIndexes,
   moveOutputColumn,
   outputPreviewRows,
@@ -15,9 +16,14 @@ describe("Output Profile builder state", () => {
 
     expect(renamed[0]).toEqual({
       clientId: "column-1",
+      columnType: "SOURCE",
       sourceColumnIndex: 0,
       sourceHeading: "Product Code",
-      outputHeading: "MATERIAL"
+      outputHeading: "MATERIAL",
+      staticValue: "",
+      adjustmentType: "NONE",
+      adjustmentValue: "",
+      roundingDecimalPlaces: null
     });
   });
 
@@ -40,10 +46,8 @@ describe("Output Profile builder state", () => {
   });
 
   it("projects no more than three source sample rows through the current output order", () => {
-    const columns = [
-      { clientId: "price", sourceColumnIndex: 2, sourceHeading: "Price", outputHeading: "PRICE" },
-      { clientId: "code", sourceColumnIndex: 0, sourceHeading: "Code", outputHeading: "MATERIAL" }
-    ];
+    const priceColumn = addSourceColumn([], { sourceColumnIndex: 2, sourceHeading: "Price" }, "price");
+    const columns = addSourceColumn(priceColumn, { sourceColumnIndex: 0, sourceHeading: "Code" }, "code");
     const preview = outputPreviewRows(columns, [
       ["A", "Alpha", "10"],
       ["B", "Beta", "20"],
@@ -52,5 +56,17 @@ describe("Output Profile builder state", () => {
     ]);
 
     expect(preview).toEqual([["10", "A"], ["20", "B"], ["30", "C"]]);
+  });
+
+  it("adds fixed columns without manufacturing a source heading", () => {
+    const columns = addStaticColumn([], "fixed-1");
+
+    expect(columns[0]).toMatchObject({
+      columnType: "STATIC",
+      sourceColumnIndex: null,
+      sourceHeading: null,
+      outputHeading: "New column",
+      staticValue: ""
+    });
   });
 });

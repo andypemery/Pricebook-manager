@@ -89,6 +89,38 @@ enum EmailConnectionStatus {
   DISABLED
 }
 
+enum OutputProfileColumnType {
+  SOURCE
+  STATIC
+}
+
+enum OutputValueAdjustmentType {
+  NONE
+  MULTIPLY
+  DIVIDE
+  PERCENT_INCREASE
+  PERCENT_DECREASE
+}
+
+enum OutputProfileFilterMatchMode {
+  ALL
+  ANY
+}
+
+enum OutputProfileFilterOperator {
+  EQUALS
+  NOT_EQUALS
+  CONTAINS
+  NOT_CONTAINS
+  STARTS_WITH
+  IS_BLANK
+  IS_NOT_BLANK
+  GREATER_THAN
+  GREATER_THAN_OR_EQUAL
+  LESS_THAN
+  LESS_THAN_OR_EQUAL
+}
+
 model Tenant {
   id        String       @id @default(cuid())
   name      String
@@ -675,22 +707,24 @@ model SourceWorksheet {
 }
 
 model OutputProfile {
-  id                     String               @id @default(cuid())
+  id                     String                       @id @default(cuid())
   tenantId               String
-  tenant                 Tenant               @relation(fields: [tenantId], references: [id])
+  tenant                 Tenant                       @relation(fields: [tenantId], references: [id])
   sourceWorkbookImportId String
-  sourceWorkbookImport   SourceWorkbookImport @relation(fields: [sourceWorkbookImportId], references: [id])
+  sourceWorkbookImport   SourceWorkbookImport         @relation(fields: [sourceWorkbookImportId], references: [id])
   sourceWorksheetId      String
-  sourceWorksheet        SourceWorksheet      @relation(fields: [sourceWorksheetId], references: [id])
+  sourceWorksheet        SourceWorksheet              @relation(fields: [sourceWorksheetId], references: [id])
   name                   String
+  filterMatchMode        OutputProfileFilterMatchMode @default(ALL)
   createdById            String?
-  createdBy              User?                @relation("OutputProfileCreator", fields: [createdById], references: [id])
+  createdBy              User?                        @relation("OutputProfileCreator", fields: [createdById], references: [id])
   updatedById            String?
-  updatedBy              User?                @relation("OutputProfileUpdater", fields: [updatedById], references: [id])
-  createdAt              DateTime             @default(now())
-  updatedAt              DateTime             @updatedAt
+  updatedBy              User?                        @relation("OutputProfileUpdater", fields: [updatedById], references: [id])
+  createdAt              DateTime                     @default(now())
+  updatedAt              DateTime                     @updatedAt
 
   columns OutputProfileColumn[]
+  filters OutputProfileFilterRule[]
 
   @@index([tenantId, updatedAt])
   @@index([sourceWorkbookImportId])
@@ -698,17 +732,37 @@ model OutputProfile {
 }
 
 model OutputProfileColumn {
-  id                String        @id @default(cuid())
+  id                    String                    @id @default(cuid())
+  outputProfileId       String
+  outputProfile         OutputProfile             @relation(fields: [outputProfileId], references: [id], onDelete: Cascade)
+  columnType            OutputProfileColumnType   @default(SOURCE)
+  sourceColumnIndex     Int?
+  sourceHeading         String?
+  outputHeading         String
+  staticValue           String?
+  adjustmentType        OutputValueAdjustmentType @default(NONE)
+  adjustmentValue       Decimal?                  @db.Decimal(30, 12)
+  roundingDecimalPlaces Int?
+  position              Int
+  configuration         Json?
+  createdAt             DateTime                  @default(now())
+  updatedAt             DateTime                  @updatedAt
+
+  @@unique([outputProfileId, position])
+  @@index([outputProfileId])
+}
+
+model OutputProfileFilterRule {
+  id                String                      @id @default(cuid())
   outputProfileId   String
-  outputProfile     OutputProfile @relation(fields: [outputProfileId], references: [id], onDelete: Cascade)
-  columnType        String        @default("SOURCE")
-  sourceColumnIndex Int?
-  sourceHeading     String?
-  outputHeading     String
+  outputProfile     OutputProfile               @relation(fields: [outputProfileId], references: [id], onDelete: Cascade)
+  sourceColumnIndex Int
+  sourceHeading     String
+  operator          OutputProfileFilterOperator
+  comparisonValue   String?
   position          Int
-  configuration     Json?
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
+  createdAt         DateTime                    @default(now())
+  updatedAt         DateTime                    @updatedAt
 
   @@unique([outputProfileId, position])
   @@index([outputProfileId])

@@ -2,17 +2,24 @@
 
 import { useMemo, useState, useTransition, type DragEvent } from "react";
 import { useRouter } from "next/navigation";
-import { Check, ChevronLeft, ChevronRight, GripVertical, Plus, Save, Trash2 } from "lucide-react";
+import { Check, GripVertical, Plus, Save } from "lucide-react";
+import { OutputColumnInspector } from "@/components/data-mapper/output-column-inspector";
+import { OutputProfileFilters } from "@/components/data-mapper/output-profile-filters";
 import { saveOutputProfileAction } from "@/lib/actions/output-profile.actions";
 import {
+  addFilter,
   addSourceColumn,
+  addStaticColumn,
   mappedSourceColumnIndexes,
+  moveFilter,
   moveOutputColumn,
-  outputPreviewRows,
+  removeFilter,
   removeOutputColumn,
-  renameOutputColumn
+  updateFilter,
+  updateOutputColumn
 } from "@/lib/data-mapper/output-profiles/profile-state";
-import type { OutputProfileDraft, SourceWorksheetPreview } from "@/lib/data-mapper/output-profiles/types";
+import { buildOutputPreview, describeColumnRule } from "@/lib/data-mapper/output-profiles/rules";
+import type { OutputProfileColumnDraft, OutputProfileDraft, SourceWorksheetPreview } from "@/lib/data-mapper/output-profiles/types";
 
 const sourceDragType = "application/x-pricebook-source-column";
 const outputDragType = "application/x-pricebook-output-column";
@@ -33,9 +40,17 @@ export function OutputProfileBuilder({ source, initialDraft, canEdit }: {
   const [error, setError] = useState<string | null>(null);
   const [isSaving, startSaving] = useTransition();
   const usedSourceIndexes = useMemo(() => mappedSourceColumnIndexes(draft.columns), [draft.columns]);
-  const previewRows = useMemo(() => outputPreviewRows(draft.columns, source.sampleRows), [draft.columns, source.sampleRows]);
+  const preview = useMemo(
+    () => buildOutputPreview(draft.columns, source.sampleRows, draft.filters, draft.filterMatchMode),
+    [draft.columns, draft.filterMatchMode, draft.filters, source.sampleRows]
+  );
   const selectedColumnIndex = draft.columns.findIndex((column) => column.clientId === selectedColumnId);
   const selectedColumn = selectedColumnIndex >= 0 ? draft.columns[selectedColumnIndex] : null;
+
+  function resetSaveState() {
+    setMessage(null);
+    setError(null);
+  }
 
   function addColumn(sourceColumnIndex: number, targetIndex = draft.columns.length) {
     if (!canEdit) return;
@@ -47,8 +62,15 @@ export function OutputProfileBuilder({ source, initialDraft, canEdit }: {
       return { ...current, columns: targetIndex === current.columns.length ? appended : moveOutputColumn(appended, clientId, targetIndex) };
     });
     setSelectedColumnId(clientId);
-    setMessage(null);
-    setError(null);
+    resetSaveState();
+  }
+
+  function addFixedColumn() {
+    if (!canEdit) return;
+    const clientId = newClientId();
+    setDraft((current) => ({ ...current, columns: addStaticColumn(current.columns, clientId) }));
+    setSelectedColumnId(clientId);
+    resetSaveState();
   }
 
   function moveColumn(clientId: string, targetIndex: number) {
@@ -61,7 +83,7 @@ export function OutputProfileBuilder({ source, initialDraft, canEdit }: {
     if (!canEdit) return;
     setDraft((current) => ({ ...current, columns: removeOutputColumn(current.columns, clientId) }));
     setSelectedColumnId(null);
-    setMessage(null);
+    resetSaveState();
   }
 
   function dropIntoOutput(event: DragEvent<HTMLElement>, targetIndex: number) {
@@ -75,17 +97,41 @@ export function OutputProfileBuilder({ source, initialDraft, canEdit }: {
     if (clientId) moveColumn(clientId, Math.min(targetIndex, Math.max(0, draft.columns.length - 1)));
   }
 
+  function addProfileFilter() {
+    if (!canEdit || source.headers.length === 0) return;
+    setDraft((current) => ({
+      ...current,
+      filters: addFilter(current.filters, { sourceColumnIndex: 0, sourceHeading: source.headers[0] }, newClientId())
+    }));
+    resetSaveState();
+  }
+
   function saveProfile() {
     if (!canEdit || isSaving) return;
-    setMessage(null);
-    setError(null);
+    resetSaveState();
     startSaving(async () => {
       const result = await saveOutputProfileAction({
         id: draft.id,
         name: draft.name,
         sourceWorkbookImportId: draft.sourceWorkbookImportId,
         sourceWorksheetId: draft.sourceWorksheetId,
-        columns: draft.columns.map(({ sourceColumnIndex, sourceHeading, outputHeading }) => ({ sourceColumnIndex, sourceHeading, outputHeading }))
+        columns: draft.columns.map((column) => ({
+          columnType: column.columnType,
+          sourceColumnIndex: column.sourceColumnIndex,
+          sourceHeading: column.sourceHeading,
+          outputHeading: column.outputHeading,
+          staticValue: column.staticValue,
+          adjustmentType: column.adjustmentType,
+          adjustmentValue: column.adjustmentValue,
+          roundingDecimalPlaces: column.roundingDecimalPlaces
+        })),
+        filterMatchMode: draft.filterMatchMode,
+        filters: draft.filters.map((filter) => ({
+          sourceColumnIndex: filter.sourceColumnIndex,
+          sourceHeading: filter.sourceHeading,
+          operator: filter.operator,
+          comparisonValue: filter.comparisonValue
+        }))
       });
       if (!result.ok) {
         setError(result.error);
@@ -96,6 +142,12 @@ export function OutputProfileBuilder({ source, initialDraft, canEdit }: {
       router.replace(`/mapping?profile=${encodeURIComponent(result.profileId)}`);
       router.refresh();
     });
+  }
+
+  function updateSelectedColumn(changes: Partial<Omit<OutputProfileColumnDraft, "clientId" | "columnType" | "sourceColumnIndex" | "sourceHeading">>) {
+    if (!selectedColumn) return;
+    setDraft((current) => ({ ...current, columns: updateOutputColumn(current.columns, selectedColumn.clientId, changes) }));
+    resetSaveState();
   }
 
   return (
@@ -160,9 +212,12 @@ export function OutputProfileBuilder({ source, initialDraft, canEdit }: {
           <div>
             <p className="sheetLabel">Output sheet</p>
             <h2 id="output-sheet-title">{draft.name.trim() || "Untitled Output Profile"}</h2>
-            <p className="muted">Arrange the columns exactly as they should appear in the future output file.</p>
+            <p className="muted">Arrange fields, then optionally adjust values or add fixed output columns.</p>
           </div>
-          <span className="badge">{draft.columns.length} columns</span>
+          <div className="sheetHeaderActions">
+            <span className="badge">{draft.columns.length} columns</span>
+            {canEdit ? <button className="secondary" type="button" onClick={addFixedColumn}><Plus aria-hidden="true" size={16} /> Add fixed column</button> : null}
+          </div>
         </div>
         <div className={draft.columns.length === 0 ? "outputSheetScroll emptyOutputDropzone" : "outputSheetScroll"} onDragOver={(event) => { if (canEdit) event.preventDefault(); }} onDrop={(event) => dropIntoOutput(event, draft.columns.length)}>
           {draft.columns.length > 0 ? (
@@ -170,16 +225,21 @@ export function OutputProfileBuilder({ source, initialDraft, canEdit }: {
               <thead>
                 <tr>
                   {draft.columns.map((column, index) => {
-                    const customised = column.outputHeading !== column.sourceHeading;
+                    const customised = column.columnType === "SOURCE" && column.outputHeading !== column.sourceHeading;
+                    const ruleDescription = describeColumnRule(column);
                     return (
-                      <th className={`${selectedColumnId === column.clientId ? "outputHeadingCell selected" : "outputHeadingCell"}${customised ? " customised" : ""}`} draggable={canEdit} key={column.clientId} onDragOver={(event) => { if (canEdit) event.preventDefault(); }} onDrop={(event) => { event.stopPropagation(); dropIntoOutput(event, index); }} onDragStart={(event) => {
+                      <th className={`${selectedColumnId === column.clientId ? "outputHeadingCell selected" : "outputHeadingCell"}${customised || column.columnType === "STATIC" ? " customised" : ""}`} draggable={canEdit} key={column.clientId} onDragOver={(event) => { if (canEdit) event.preventDefault(); }} onDrop={(event) => { event.stopPropagation(); dropIntoOutput(event, index); }} onDragStart={(event) => {
                         event.dataTransfer.setData(outputDragType, column.clientId);
                         event.dataTransfer.effectAllowed = "move";
                       }}>
                         <button className="outputHeadingButton" type="button" onClick={() => setSelectedColumnId(column.clientId)}>
                           <GripVertical aria-hidden="true" size={15} />
-                          <span><strong>{column.outputHeading || "Untitled column"}</strong><small>from {column.sourceHeading}</small></span>
-                          {customised ? <span className="customisedMarker">Customised</span> : null}
+                          <span>
+                            <strong>{column.outputHeading || "Untitled column"}</strong>
+                            <small>{column.columnType === "STATIC" ? "Fixed value" : `from ${column.sourceHeading}`}</small>
+                            {ruleDescription ? <small className="columnRuleSummary">{ruleDescription}</small> : null}
+                          </span>
+                          {column.columnType === "STATIC" ? <span className="customisedMarker">Fixed</span> : customised ? <span className="customisedMarker">Customised</span> : null}
                         </button>
                       </th>
                     );
@@ -187,31 +247,45 @@ export function OutputProfileBuilder({ source, initialDraft, canEdit }: {
                 </tr>
               </thead>
               <tbody>
-                {previewRows.map((row, rowIndex) => <tr key={rowIndex}>{row.map((cell, columnIndex) => <td key={`${draft.columns[columnIndex].clientId}-${rowIndex}`}>{cell}</td>)}</tr>)}
+                {preview.outputRows.map((row, rowIndex) => <tr key={rowIndex}>{row.map((cell, columnIndex) => <td key={`${draft.columns[columnIndex].clientId}-${rowIndex}`}>{cell}</td>)}</tr>)}
               </tbody>
             </table>
           ) : (
-            <div className="emptyOutputMessage"><Plus aria-hidden="true" size={24} /><strong>Drop a source heading here</strong><span>Or use the + button on any source heading.</span></div>
+            <div className="emptyOutputMessage"><Plus aria-hidden="true" size={24} /><strong>Drop a source heading here</strong><span>Or add a fixed column for values such as CURRENCY or CONTRACT.</span></div>
           )}
         </div>
 
-        {selectedColumn ? (
-          <div className="outputColumnInspector" aria-label="Selected output column settings">
-            <label className="field">
-              <span>Output heading</span>
-              <input value={selectedColumn.outputHeading} maxLength={200} disabled={!canEdit} onChange={(event) => setDraft((current) => ({ ...current, columns: renameOutputColumn(current.columns, selectedColumn.clientId, event.target.value) }))} />
-            </label>
-            <div className="sourceHeadingReference"><span>Original source heading</span><strong>{selectedColumn.sourceHeading}</strong></div>
-            {canEdit ? (
-              <div className="actions outputColumnActions">
-                <button className="secondary" type="button" onClick={() => moveColumn(selectedColumn.clientId, selectedColumnIndex - 1)} disabled={selectedColumnIndex === 0}><ChevronLeft aria-hidden="true" size={16} /> Move left</button>
-                <button className="secondary" type="button" onClick={() => moveColumn(selectedColumn.clientId, selectedColumnIndex + 1)} disabled={selectedColumnIndex === draft.columns.length - 1}>Move right <ChevronRight aria-hidden="true" size={16} /></button>
-                <button className="dangerButton" type="button" onClick={() => removeColumn(selectedColumn.clientId)}><Trash2 aria-hidden="true" size={16} /> Remove column</button>
-              </div>
-            ) : null}
+        {draft.filters.length > 0 && preview.matchingSourceRows.length === 0 ? (
+          <div className="emptyFilteredPreview" role="status">
+            <strong>No rows in the current 3-row sample match these filters.</strong>
+            <span>Full matching results will be determined when the output is generated.</span>
           </div>
         ) : null}
+
+        {selectedColumn ? (
+          <OutputColumnInspector
+            column={selectedColumn}
+            columnIndex={selectedColumnIndex}
+            columnCount={draft.columns.length}
+            canEdit={canEdit}
+            onChange={updateSelectedColumn}
+            onMove={(targetIndex) => moveColumn(selectedColumn.clientId, targetIndex)}
+            onRemove={() => removeColumn(selectedColumn.clientId)}
+          />
+        ) : null}
       </section>
+
+      <OutputProfileFilters
+        headers={source.headers}
+        filters={draft.filters}
+        matchMode={draft.filterMatchMode}
+        canEdit={canEdit}
+        onAdd={addProfileFilter}
+        onChange={(clientId, changes) => { setDraft((current) => ({ ...current, filters: updateFilter(current.filters, clientId, changes) })); resetSaveState(); }}
+        onMove={(clientId, targetIndex) => { setDraft((current) => ({ ...current, filters: moveFilter(current.filters, clientId, targetIndex) })); setMessage(null); }}
+        onRemove={(clientId) => { setDraft((current) => ({ ...current, filters: removeFilter(current.filters, clientId) })); resetSaveState(); }}
+        onMatchModeChange={(filterMatchMode) => { setDraft((current) => ({ ...current, filterMatchMode })); resetSaveState(); }}
+      />
     </section>
   );
 }

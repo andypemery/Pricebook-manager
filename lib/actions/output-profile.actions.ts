@@ -21,7 +21,7 @@ export async function saveOutputProfileAction(input: SaveOutputProfileInput): Pr
       action: input.id ? "OUTPUT_PROFILE_UPDATED" : "OUTPUT_PROFILE_CREATED",
       entityType: "OutputProfile",
       entityId: profile.id,
-      after: { name: profile.name, outputColumnCount: input.columns.length }
+      after: { name: profile.name, outputColumnCount: input.columns.length, filterCount: input.filters.length, filterMatchMode: input.filterMatchMode }
     });
     revalidatePath("/mapping");
     return { ok: true, profileId: profile.id, message: "Output Profile saved." };

@@ -21,26 +21,24 @@ export async function saveOutputProfileForTenant(
 
   const canonicalHeaders = stringArrayFromJson(sourceWorksheet.headers, "Source headings");
   const valid = validateOutputProfileInput(input, canonicalHeaders);
-  const columnData = valid.columns.map((column, position) => ({
-    columnType: "SOURCE",
-    sourceColumnIndex: column.sourceColumnIndex,
-    sourceHeading: column.sourceHeading,
-    outputHeading: column.outputHeading,
-    position
-  }));
+  const columnData = valid.columns.map((column, position) => ({ ...column, position }));
+  const filterData = valid.filters.map((filter, position) => ({ ...filter, position }));
+  const configuration = {
+    name: valid.name,
+    sourceWorkbookImportId: valid.sourceWorkbookImportId,
+    sourceWorksheetId: valid.sourceWorksheetId,
+    filterMatchMode: valid.filterMatchMode,
+    updatedById: actor.id,
+    columns: { deleteMany: {}, create: columnData },
+    filters: { deleteMany: {}, create: filterData }
+  };
 
   if (valid.id) {
     const existing = await db.outputProfile.findFirst({ where: { id: valid.id, tenantId: actor.tenantId }, select: { id: true } });
     if (!existing) throw new OutputProfileNotFoundError("The Output Profile is not available.");
     return db.outputProfile.update({
       where: { id: existing.id },
-      data: {
-        name: valid.name,
-        sourceWorkbookImportId: valid.sourceWorkbookImportId,
-        sourceWorksheetId: valid.sourceWorksheetId,
-        updatedById: actor.id,
-        columns: { deleteMany: {}, create: columnData }
-      },
+      data: configuration,
       select: { id: true, name: true, updatedAt: true }
     });
   }
@@ -48,16 +46,15 @@ export async function saveOutputProfileForTenant(
   return db.outputProfile.create({
     data: {
       tenantId: actor.tenantId,
-      name: valid.name,
-      sourceWorkbookImportId: valid.sourceWorkbookImportId,
-      sourceWorksheetId: valid.sourceWorksheetId,
       createdById: actor.id,
-      updatedById: actor.id,
-      columns: { create: columnData }
+      ...configuration,
+      columns: { create: columnData },
+      filters: { create: filterData }
     },
     select: { id: true, name: true, updatedAt: true }
   });
 }
+
 export async function listOutputProfileWorkspace(db: PrismaClient, tenantId: string) {
   const [profiles, sourceImports] = await Promise.all([
     db.outputProfile.findMany({
@@ -98,9 +95,27 @@ export async function loadOutputProfileBuilder(
       select: {
         id: true,
         name: true,
+        filterMatchMode: true,
         sourceWorkbookImportId: true,
         sourceWorksheetId: true,
-        columns: { orderBy: { position: "asc" }, select: { id: true, sourceColumnIndex: true, sourceHeading: true, outputHeading: true } },
+        columns: {
+          orderBy: { position: "asc" },
+          select: {
+            id: true,
+            columnType: true,
+            sourceColumnIndex: true,
+            sourceHeading: true,
+            outputHeading: true,
+            staticValue: true,
+            adjustmentType: true,
+            adjustmentValue: true,
+            roundingDecimalPlaces: true
+          }
+        },
+        filters: {
+          orderBy: { position: "asc" },
+          select: { id: true, sourceColumnIndex: true, sourceHeading: true, operator: true, comparisonValue: true }
+        },
         sourceWorkbookImport: { select: { originalFileName: true } },
         sourceWorksheet: { select: { id: true, name: true, headers: true, sampleRows: true } }
       }
@@ -122,11 +137,24 @@ export async function loadOutputProfileBuilder(
         name: profile.name,
         sourceWorkbookImportId: profile.sourceWorkbookImportId,
         sourceWorksheetId: profile.sourceWorksheetId,
+        filterMatchMode: profile.filterMatchMode,
         columns: profile.columns.map((column) => ({
           clientId: column.id,
-          sourceColumnIndex: column.sourceColumnIndex ?? -1,
-          sourceHeading: column.sourceHeading ?? "",
-          outputHeading: column.outputHeading
+          columnType: column.columnType,
+          sourceColumnIndex: column.sourceColumnIndex,
+          sourceHeading: column.sourceHeading,
+          outputHeading: column.outputHeading,
+          staticValue: column.staticValue ?? "",
+          adjustmentType: column.adjustmentType,
+          adjustmentValue: column.adjustmentValue?.toString() ?? "",
+          roundingDecimalPlaces: column.roundingDecimalPlaces as 0 | 1 | 2 | 3 | 4 | null
+        })),
+        filters: profile.filters.map((filter) => ({
+          clientId: filter.id,
+          sourceColumnIndex: filter.sourceColumnIndex,
+          sourceHeading: filter.sourceHeading,
+          operator: filter.operator,
+          comparisonValue: filter.comparisonValue ?? ""
         }))
       }
     };
@@ -163,7 +191,9 @@ export async function loadOutputProfileBuilder(
       name: "",
       sourceWorkbookImportId: worksheet.sourceWorkbookImportId,
       sourceWorksheetId: worksheet.id,
-      columns: []
+      columns: [],
+      filterMatchMode: "ALL",
+      filters: []
     }
   };
 }
