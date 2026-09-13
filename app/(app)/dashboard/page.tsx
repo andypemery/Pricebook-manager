@@ -154,8 +154,8 @@ export default async function Dashboard() {
 
       <section className="card">
         <div className="sectionHeader">
-          <h2>Architecture placeholders</h2>
-          <span className="muted">Real import, mapping, formula, comparison and export processing is intentionally not implemented yet.</span>
+          <h2>Engine readiness</h2>
+          <span className="muted">Workbook import, validation and visual Output Profiles are active; later transformation and export engines remain planned.</span>
         </div>
         <div className="grid compactGrid">
           {dataMapperEngines.map((engine) => (

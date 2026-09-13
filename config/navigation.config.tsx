@@ -52,7 +52,7 @@ export const navigationItems: NavigationItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, scope: "all" },
   { href: "/projects", label: "Projects", icon: FolderKanban, scope: "all" },
   { href: "/workbook", label: "Workbook", icon: FileSpreadsheet, scope: "all" },
-  { href: "/mapping", label: "Mapping", icon: Columns3, scope: "all" },
+  { href: "/mapping", label: "Output Profiles", icon: Columns3, scope: "all" },
   { href: "/validation", label: "Validation", icon: ClipboardCheck, scope: "all" },
   { href: "/comparison", label: "Comparison", icon: Braces, scope: "all" },
   { href: "/templates", label: "Templates", icon: FileCog, scope: "all" },

@@ -2,7 +2,8 @@
 
 import { useMemo, useRef, useState } from "react";
 import type ExcelJS from "exceljs";
-import { ArrowDownUp, FileSpreadsheet, LoaderCircle, Search, Upload } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowDownUp, Columns3, FileSpreadsheet, LoaderCircle, Search, Upload } from "lucide-react";
 import type { UploadedWorkbookDetails, ValidationIssueCategory, ValidationSeverity, WorkbookSummary, WorkbookValidationResult, WorksheetPreview } from "@/lib/data-mapper/types";
 import { createWorksheetPreview, friendlyExcelImportMessage, readWorkbook } from "@/lib/data-mapper/excel-import";
 import { validateWorkbook } from "@/lib/data-mapper/validation";
@@ -66,8 +67,10 @@ function visibleRows(preview: WorksheetPreview | null, searchTerm: string, sort:
   });
 }
 
-export function WorkbookImporter() {
+export function WorkbookImporter({ canPrepareOutputProfiles }: { canPrepareOutputProfiles: boolean }) {
+  const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [workbook, setWorkbook] = useState<ExcelJS.Workbook | null>(null);
   const [summary, setSummary] = useState<WorkbookSummary | null>(null);
   const [validation, setValidation] = useState<WorkbookValidationResult | null>(null);
@@ -80,7 +83,9 @@ export function WorkbookImporter() {
   const [sort, setSort] = useState<SortState>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isPreparingProfile, setIsPreparingProfile] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [profileError, setProfileError] = useState<string | null>(null);
 
   const selectedWorksheet = summary?.worksheets.find((worksheet) => worksheet.name === selectedWorksheetName) ?? summary?.worksheets[0] ?? null;
   const preview = useMemo(() => {
@@ -120,6 +125,7 @@ export function WorkbookImporter() {
       setWorkbook(result.workbook);
       setSummary(result.summary);
       setValidation(validationResult);
+      setSelectedFile(file);
       setValidationFilters({ severity: "All", category: "All", worksheetName: "All" });
       setSelectedIssueId(null);
       setUploadDetails(currentUploadDetails);
@@ -128,6 +134,7 @@ export function WorkbookImporter() {
       setWorkbook(null);
       setSummary(null);
       setValidation(null);
+      setSelectedFile(null);
       setUploadDetails(null);
       setSelectedWorksheetName(null);
       setError(friendlyExcelImportMessage(importError));
@@ -155,6 +162,24 @@ export function WorkbookImporter() {
     setSort(null);
   }
 
+  async function prepareOutputProfile() {
+    if (!selectedFile || !canPrepareOutputProfiles || isPreparingProfile) return;
+    setIsPreparingProfile(true);
+    setProfileError(null);
+    try {
+      const formData = new FormData();
+      formData.set("workbook", selectedFile);
+      if (selectedWorksheetName) formData.set("worksheetName", selectedWorksheetName);
+      const response = await fetch("/api/data-mapper/source-imports", { method: "POST", body: formData });
+      const result = await response.json() as { error?: string; mappingUrl?: string };
+      if (!response.ok || !result.mappingUrl) throw new Error(result.error || "The workbook could not be prepared for an Output Profile.");
+      router.push(result.mappingUrl);
+    } catch (profilePreparationError) {
+      setProfileError(profilePreparationError instanceof Error ? profilePreparationError.message : "The workbook could not be prepared for an Output Profile.");
+      setIsPreparingProfile(false);
+    }
+  }
+
   return (
     <>
       <section className="hero">
@@ -164,9 +189,19 @@ export function WorkbookImporter() {
             <h1>Excel import engine</h1>
             <p>Import Excel workbooks, inspect worksheet structure and preview the first 100 data rows before mapping or validation.</p>
           </div>
-          {summary ? <span className="badge success">Workbook loaded</span> : <span className="badge">Ready for upload</span>}
+          <div className="actions">
+            {summary ? <span className="badge success">Workbook loaded</span> : <span className="badge">Ready for upload</span>}
+            {summary && selectedFile && canPrepareOutputProfiles ? (
+              <button className="primary" type="button" onClick={prepareOutputProfile} disabled={isPreparingProfile}>
+                {isPreparingProfile ? <LoaderCircle aria-hidden="true" size={18} className="spinIcon" /> : <Columns3 aria-hidden="true" size={18} />}
+                {isPreparingProfile ? "Preparing profile" : "Use in Output Profile"}
+              </button>
+            ) : null}
+          </div>
         </div>
       </section>
+
+      {profileError ? <div className="warningBox">{profileError}</div> : null}
 
       <section className="card">
         <div

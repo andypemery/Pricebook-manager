@@ -90,112 +90,117 @@ enum EmailConnectionStatus {
 }
 
 model Tenant {
-  id                  String               @id @default(cuid())
-  name                String
-  slug                String               @unique
-  status              TenantStatus         @default(ACTIVE)
-  createdAt           DateTime             @default(now())
-  updatedAt           DateTime             @updatedAt
+  id        String       @id @default(cuid())
+  name      String
+  slug      String       @unique
+  status    TenantStatus @default(ACTIVE)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
 
-  users               User[]
-  records             SampleRecord[]
-  tickets             SupportTicket[]
-  featureRequests     FeatureRequest[]
-  securityIssues      SecurityIssue[]
-  globalMessages      GlobalMessage[]
-  fileReferences      FileReference[]
-  dataSubjectRequests DataSubjectRequest[]
-  dataRegisterItems   DataRegisterItem[]
-  privacyNotices      PrivacyNotice[]
-  emailTemplates      EmailTemplate[]
-  emailProviderSetting EmailProviderSetting?
-  emailSendLogs        EmailSendLog[]
-  userInvites         UserInvite[]
-  userImportBatches   UserImportBatch[]
-  roleTemplates       RoleTemplate[]
-  emailSenderProfiles EmailSenderProfile[]
-  notificationRoutes  NotificationRoute[]
-  passwordPolicy      PasswordPolicy?
-  backupStatuses      BackupStatus[]
-  auditLogs           AuditLog[]
-  settings            TenantSetting[]
-  usageSnapshots      UsageSnapshot[]
+  users                 User[]
+  records               SampleRecord[]
+  tickets               SupportTicket[]
+  featureRequests       FeatureRequest[]
+  securityIssues        SecurityIssue[]
+  globalMessages        GlobalMessage[]
+  fileReferences        FileReference[]
+  dataSubjectRequests   DataSubjectRequest[]
+  dataRegisterItems     DataRegisterItem[]
+  privacyNotices        PrivacyNotice[]
+  emailTemplates        EmailTemplate[]
+  emailProviderSetting  EmailProviderSetting?
+  emailSendLogs         EmailSendLog[]
+  userInvites           UserInvite[]
+  userImportBatches     UserImportBatch[]
+  roleTemplates         RoleTemplate[]
+  emailSenderProfiles   EmailSenderProfile[]
+  notificationRoutes    NotificationRoute[]
+  passwordPolicy        PasswordPolicy?
+  backupStatuses        BackupStatus[]
+  auditLogs             AuditLog[]
+  settings              TenantSetting[]
+  usageSnapshots        UsageSnapshot[]
+  sourceWorkbookImports SourceWorkbookImport[]
+  outputProfiles        OutputProfile[]
 
   @@index([status])
 }
 
 model User {
-  id                     String                         @id @default(cuid())
+  id                     String    @id @default(cuid())
   tenantId               String?
-  tenant                 Tenant?                        @relation(fields: [tenantId], references: [id])
-  email                  String                         @unique
+  tenant                 Tenant?   @relation(fields: [tenantId], references: [id])
+  email                  String    @unique
   firstName              String
   surname                String
-  role                   UserRole                       @default(VIEW_ONLY)
+  role                   UserRole  @default(VIEW_ONLY)
   permissions            Json?
   passwordHash           String?
-  isActive               Boolean                        @default(true)
+  isActive               Boolean   @default(true)
   invitedAt              DateTime?
   inviteAcceptedAt       DateTime?
-  themePreference        String                         @default("dark")
-  forcePasswordChange    Boolean                        @default(true)
-  mfaRequired            Boolean                        @default(false)
-  failedLoginCount       Int                            @default(0)
+  themePreference        String    @default("dark")
+  forcePasswordChange    Boolean   @default(true)
+  mfaRequired            Boolean   @default(false)
+  failedLoginCount       Int       @default(0)
   failedLoginWindowStart DateTime?
   lockedUntil            DateTime?
   lastLoginAt            DateTime?
   walkthroughCompletedAt DateTime?
-  createdAt              DateTime                       @default(now())
-  updatedAt              DateTime                       @updatedAt
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
 
-  sessions               Session[]
-  passwordResetTokens    PasswordResetToken[]
-  mfaChallenges          MfaChallenge[]
-  userInvites            UserInvite[]
-  createdRecords         SampleRecord[]                 @relation("RecordCreator")
-  updatedRecords         SampleRecord[]                 @relation("RecordUpdater")
-  auditLogs              AuditLog[]
-  messageAcknowledgements GlobalMessageAcknowledgement[]
-  emailSendLogs          EmailSendLog[]
+  sessions                     Session[]
+  passwordResetTokens          PasswordResetToken[]
+  mfaChallenges                MfaChallenge[]
+  userInvites                  UserInvite[]
+  createdRecords               SampleRecord[]                 @relation("RecordCreator")
+  updatedRecords               SampleRecord[]                 @relation("RecordUpdater")
+  auditLogs                    AuditLog[]
+  messageAcknowledgements      GlobalMessageAcknowledgement[]
+  emailSendLogs                EmailSendLog[]
+  sourceWorkbookImportsCreated SourceWorkbookImport[]         @relation("SourceWorkbookImportCreator")
+  outputProfilesCreated        OutputProfile[]                @relation("OutputProfileCreator")
+  outputProfilesUpdated        OutputProfile[]                @relation("OutputProfileUpdater")
 
   @@index([tenantId])
   @@index([role])
 }
 
 model UserImportBatch {
-  id              String          @id @default(cuid())
+  id              String    @id @default(cuid())
   tenantId        String
-  tenant          Tenant          @relation(fields: [tenantId], references: [id])
+  tenant          Tenant    @relation(fields: [tenantId], references: [id])
   fileName        String
   createdById     String?
-  status          String          @default("PREVIEW")
-  importedCount   Int             @default(0)
-  inviteSentCount Int             @default(0)
-  skippedCount    Int             @default(0)
-  createdAt       DateTime        @default(now())
+  status          String    @default("PREVIEW")
+  importedCount   Int       @default(0)
+  inviteSentCount Int       @default(0)
+  skippedCount    Int       @default(0)
+  createdAt       DateTime  @default(now())
   confirmedAt     DateTime?
 
-  rows            UserImportRow[]
+  rows UserImportRow[]
 
   @@index([tenantId, createdAt])
 }
 
 model UserImportRow {
-  id              String          @id @default(cuid())
-  batchId         String
-  batch           UserImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
-  rowNumber       Int
-  firstName       String?
-  surname         String?
-  email           String?
-  roleLabel       String?
-  role            UserRole?
-  permissions     Json?
-  isValid         Boolean         @default(false)
-  error           String?
-  importedUserId  String?
-  inviteSentAt    DateTime?
-  createdAt       DateTime        @default(now())
+  id             String          @id @default(cuid())
+  batchId        String
+  batch          UserImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  rowNumber      Int
+  firstName      String?
+  surname        String?
+  email          String?
+  roleLabel      String?
+  role           UserRole?
+  permissions    Json?
+  isValid        Boolean         @default(false)
+  error          String?
+  importedUserId String?
+  inviteSentAt   DateTime?
+  createdAt      DateTime        @default(now())
 
   @@index([batchId, isValid])
 }
@@ -219,14 +224,14 @@ model UserInvite {
 }
 
 model Session {
-  id          String   @id @default(cuid())
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tokenHash   String   @unique
-  expiresAt   DateTime
-  userAgent   String?
-  ipAddress   String?
-  createdAt   DateTime @default(now())
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  expiresAt DateTime
+  userAgent String?
+  ipAddress String?
+  createdAt DateTime @default(now())
 }
 
 model PasswordResetToken {
@@ -240,34 +245,34 @@ model PasswordResetToken {
 }
 
 model MfaChallenge {
-  id            String    @id @default(cuid())
-  userId        String
-  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  challengeHash String    @unique
-  codeHash      String
-  failedAttemptCount Int   @default(0)
-  expiresAt     DateTime
-  usedAt        DateTime?
-  createdAt     DateTime  @default(now())
+  id                 String    @id @default(cuid())
+  userId             String
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  challengeHash      String    @unique
+  codeHash           String
+  failedAttemptCount Int       @default(0)
+  expiresAt          DateTime
+  usedAt             DateTime?
+  createdAt          DateTime  @default(now())
 }
 
 model SampleRecord {
-  id          String          @id @default(cuid())
+  id          String    @id @default(cuid())
   tenantId    String
-  tenant      Tenant          @relation(fields: [tenantId], references: [id])
+  tenant      Tenant    @relation(fields: [tenantId], references: [id])
   title       String
-  status      String          @default("New")
+  status      String    @default("New")
   description String?
   createdById String?
-  createdBy   User?           @relation("RecordCreator", fields: [createdById], references: [id])
+  createdBy   User?     @relation("RecordCreator", fields: [createdById], references: [id])
   updatedById String?
-  updatedBy   User?           @relation("RecordUpdater", fields: [updatedById], references: [id])
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  updatedBy   User?     @relation("RecordUpdater", fields: [updatedById], references: [id])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
   archivedAt  DateTime?
 
-  notes       RecordNote[]
-  files       FileReference[]
+  notes RecordNote[]
+  files FileReference[]
 
   @@index([tenantId, status])
 }
@@ -333,19 +338,19 @@ model SecurityIssue {
 }
 
 model GlobalMessage {
-  id                  String                         @id @default(cuid())
-  tenantId            String?
-  tenant              Tenant?                        @relation(fields: [tenantId], references: [id])
-  scope               GlobalMessageScope             @default(TENANT)
-  message             String
-  startsAt            DateTime                       @default(now())
-  endsAt              DateTime?
-  untilAcknowledged   Boolean                        @default(false)
-  isActive            Boolean                        @default(true)
-  createdById         String?
-  createdAt           DateTime                       @default(now())
+  id                String             @id @default(cuid())
+  tenantId          String?
+  tenant            Tenant?            @relation(fields: [tenantId], references: [id])
+  scope             GlobalMessageScope @default(TENANT)
+  message           String
+  startsAt          DateTime           @default(now())
+  endsAt            DateTime?
+  untilAcknowledged Boolean            @default(false)
+  isActive          Boolean            @default(true)
+  createdById       String?
+  createdAt         DateTime           @default(now())
 
-  acknowledgements    GlobalMessageAcknowledgement[]
+  acknowledgements GlobalMessageAcknowledgement[]
 }
 
 model GlobalMessageAcknowledgement {
@@ -360,11 +365,11 @@ model GlobalMessageAcknowledgement {
 }
 
 model FileReference {
-  id               String            @id @default(cuid())
+  id               String        @id @default(cuid())
   tenantId         String
-  tenant           Tenant            @relation(fields: [tenantId], references: [id])
+  tenant           Tenant        @relation(fields: [tenantId], references: [id])
   sampleRecordId   String?
-  sampleRecord     SampleRecord?      @relation(fields: [sampleRecordId], references: [id])
+  sampleRecord     SampleRecord? @relation(fields: [sampleRecordId], references: [id])
   originalFileName String
   fileType         String
   fileSizeBytes    Int
@@ -372,14 +377,15 @@ model FileReference {
   liveUrl          String?
   backupStorageKey String?
   backupUrl        String?
-  visibility       String            @default("private")
+  visibility       String        @default("private")
   checksum         String?
   uploadedById     String?
-  retentionStatus  String            @default("active")
+  retentionStatus  String        @default("active")
   deletedAt        DateTime?
-  createdAt        DateTime          @default(now())
+  createdAt        DateTime      @default(now())
 
-  accessEvents     FileAccessEvent[]
+  accessEvents          FileAccessEvent[]
+  sourceWorkbookImports SourceWorkbookImport[]
 
   @@index([tenantId])
 }
@@ -413,20 +419,20 @@ model DataSubjectRequest {
 }
 
 model DataRegisterItem {
-  id               String   @id @default(cuid())
+  id               String    @id @default(cuid())
   tenantId         String
-  tenant           Tenant   @relation(fields: [tenantId], references: [id])
+  tenant           Tenant    @relation(fields: [tenantId], references: [id])
   moduleName       String
   dataCategory     String
   purpose          String
   lawfulBasis      String
   retentionPeriod  String
   sensitivityLevel String
-  includeInSar     Boolean  @default(true)
-  canErase         Boolean  @default(false)
+  includeInSar     Boolean   @default(true)
+  canErase         Boolean   @default(false)
   reviewedAt       DateTime?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 }
 
 model PrivacyNotice {
@@ -442,66 +448,65 @@ model PrivacyNotice {
 }
 
 model RoleTemplate {
-  id              String   @id @default(cuid())
-  tenantId        String
-  tenant          Tenant   @relation(fields: [tenantId], references: [id])
-  role            UserRole
-  displayName     String
-  permissions     Json
-  nameLocked      Boolean  @default(true)
-  updatedById     String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id          String   @id @default(cuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  role        UserRole
+  displayName String
+  permissions Json
+  nameLocked  Boolean  @default(true)
+  updatedById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@unique([tenantId, role])
 }
 
 model EmailSenderProfile {
-  id              String   @id @default(cuid())
-  tenantId        String?
-  tenant          Tenant?  @relation(fields: [tenantId], references: [id])
-  key             String
-  displayName     String
-  fromEmail       String
-  replyToEmail    String?
-  isAxiomManaged  Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id             String   @id @default(cuid())
+  tenantId       String?
+  tenant         Tenant?  @relation(fields: [tenantId], references: [id])
+  key            String
+  displayName    String
+  fromEmail      String
+  replyToEmail   String?
+  isAxiomManaged Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  routes          NotificationRoute[]
+  routes NotificationRoute[]
 
   @@unique([tenantId, key])
 }
 
 model NotificationRoute {
-  id              String              @id @default(cuid())
-  tenantId        String?
-  tenant          Tenant?             @relation(fields: [tenantId], references: [id])
+  id               String              @id @default(cuid())
+  tenantId         String?
+  tenant           Tenant?             @relation(fields: [tenantId], references: [id])
   notificationType String
-  senderProfileId String?
-  senderProfile   EmailSenderProfile? @relation(fields: [senderProfileId], references: [id])
+  senderProfileId  String?
+  senderProfile    EmailSenderProfile? @relation(fields: [senderProfileId], references: [id])
   fallbackEmail    String?
-  createdAt        DateTime           @default(now())
-  updatedAt        DateTime           @updatedAt
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
 
   @@unique([tenantId, notificationType])
 }
 
 model EmailTemplate {
-  id              String   @id @default(cuid())
-  tenantId        String?
-  tenant          Tenant?  @relation(fields: [tenantId], references: [id])
-  key             String
-  subject         String
-  body            String
+  id                String   @id @default(cuid())
+  tenantId          String?
+  tenant            Tenant?  @relation(fields: [tenantId], references: [id])
+  key               String
+  subject           String
+  body              String
   requiredVariables Json?
-  isLockedByAxiom Boolean  @default(false)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  isLockedByAxiom   Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   @@unique([tenantId, key])
 }
-
 
 model EmailProviderSetting {
   id                         String                @id @default(cuid())
@@ -580,32 +585,32 @@ model TenantSetting {
 }
 
 model UsageSnapshot {
-  id               String   @id @default(cuid())
-  tenantId         String
-  tenant           Tenant   @relation(fields: [tenantId], references: [id])
-  storageUsedBytes Int      @default(0)
-  userCount        Int      @default(0)
-  recordCount      Int      @default(0)
-  supportOpenCount Int      @default(0)
-  securityOpenCount Int     @default(0)
-  createdAt        DateTime @default(now())
+  id                String   @id @default(cuid())
+  tenantId          String
+  tenant            Tenant   @relation(fields: [tenantId], references: [id])
+  storageUsedBytes  Int      @default(0)
+  userCount         Int      @default(0)
+  recordCount       Int      @default(0)
+  supportOpenCount  Int      @default(0)
+  securityOpenCount Int      @default(0)
+  createdAt         DateTime @default(now())
 
   @@index([tenantId])
 }
 
 model BackupStatus {
-  id                         String   @id @default(cuid())
+  id                         String    @id @default(cuid())
   tenantId                   String
-  tenant                     Tenant   @relation(fields: [tenantId], references: [id])
+  tenant                     Tenant    @relation(fields: [tenantId], references: [id])
   backupType                 String
-  status                     String   @default("NOT_CONFIGURED")
+  status                     String    @default("NOT_CONFIGURED")
   lastStartedAt              DateTime?
   lastCompletedAt            DateTime?
   latestVerifiedRestorePoint DateTime?
-  restoreRetentionDays       Int      @default(7)
+  restoreRetentionDays       Int       @default(7)
   verificationStatus         String?
   locationReference          String?
-  updatedAt                  DateTime @updatedAt
+  updatedAt                  DateTime  @updatedAt
 
   @@unique([tenantId, backupType])
 }
@@ -625,4 +630,86 @@ model AuditLog {
   createdAt  DateTime @default(now())
 
   @@index([tenantId, action])
+}
+
+model SourceWorkbookImport {
+  id                String         @id @default(cuid())
+  tenantId          String
+  tenant            Tenant         @relation(fields: [tenantId], references: [id])
+  fileReferenceId   String?
+  fileReference     FileReference? @relation(fields: [fileReferenceId], references: [id], onDelete: SetNull)
+  originalFileName  String
+  fileSizeBytes     Int
+  validationStatus  String         @default("VALIDATED")
+  validationSummary Json
+  createdById       String?
+  createdBy         User?          @relation("SourceWorkbookImportCreator", fields: [createdById], references: [id])
+  validatedAt       DateTime
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  worksheets     SourceWorksheet[]
+  outputProfiles OutputProfile[]
+
+  @@index([tenantId, createdAt])
+  @@index([fileReferenceId])
+}
+
+model SourceWorksheet {
+  id                     String               @id @default(cuid())
+  sourceWorkbookImportId String
+  sourceWorkbookImport   SourceWorkbookImport @relation(fields: [sourceWorkbookImportId], references: [id], onDelete: Cascade)
+  name                   String
+  position               Int
+  detectedHeaderRow      Int
+  rowCount               Int
+  columnCount            Int
+  headers                Json
+  sampleRows             Json
+  createdAt              DateTime             @default(now())
+
+  outputProfiles OutputProfile[]
+
+  @@unique([sourceWorkbookImportId, name])
+  @@index([sourceWorkbookImportId, position])
+}
+
+model OutputProfile {
+  id                     String               @id @default(cuid())
+  tenantId               String
+  tenant                 Tenant               @relation(fields: [tenantId], references: [id])
+  sourceWorkbookImportId String
+  sourceWorkbookImport   SourceWorkbookImport @relation(fields: [sourceWorkbookImportId], references: [id])
+  sourceWorksheetId      String
+  sourceWorksheet        SourceWorksheet      @relation(fields: [sourceWorksheetId], references: [id])
+  name                   String
+  createdById            String?
+  createdBy              User?                @relation("OutputProfileCreator", fields: [createdById], references: [id])
+  updatedById            String?
+  updatedBy              User?                @relation("OutputProfileUpdater", fields: [updatedById], references: [id])
+  createdAt              DateTime             @default(now())
+  updatedAt              DateTime             @updatedAt
+
+  columns OutputProfileColumn[]
+
+  @@index([tenantId, updatedAt])
+  @@index([sourceWorkbookImportId])
+  @@index([sourceWorksheetId])
+}
+
+model OutputProfileColumn {
+  id                String        @id @default(cuid())
+  outputProfileId   String
+  outputProfile     OutputProfile @relation(fields: [outputProfileId], references: [id], onDelete: Cascade)
+  columnType        String        @default("SOURCE")
+  sourceColumnIndex Int?
+  sourceHeading     String?
+  outputHeading     String
+  position          Int
+  configuration     Json?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  @@unique([outputProfileId, position])
+  @@index([outputProfileId])
 }

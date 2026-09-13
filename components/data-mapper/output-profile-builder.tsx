@@ -1,0 +1,217 @@
+"use client";
+
+import { useMemo, useState, useTransition, type DragEvent } from "react";
+import { useRouter } from "next/navigation";
+import { Check, ChevronLeft, ChevronRight, GripVertical, Plus, Save, Trash2 } from "lucide-react";
+import { saveOutputProfileAction } from "@/lib/actions/output-profile.actions";
+import {
+  addSourceColumn,
+  mappedSourceColumnIndexes,
+  moveOutputColumn,
+  outputPreviewRows,
+  removeOutputColumn,
+  renameOutputColumn
+} from "@/lib/data-mapper/output-profiles/profile-state";
+import type { OutputProfileDraft, SourceWorksheetPreview } from "@/lib/data-mapper/output-profiles/types";
+
+const sourceDragType = "application/x-pricebook-source-column";
+const outputDragType = "application/x-pricebook-output-column";
+
+function newClientId() {
+  return crypto.randomUUID();
+}
+
+export function OutputProfileBuilder({ source, initialDraft, canEdit }: {
+  source: SourceWorksheetPreview;
+  initialDraft: OutputProfileDraft;
+  canEdit: boolean;
+}) {
+  const router = useRouter();
+  const [draft, setDraft] = useState(initialDraft);
+  const [selectedColumnId, setSelectedColumnId] = useState<string | null>(initialDraft.columns[0]?.clientId ?? null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isSaving, startSaving] = useTransition();
+  const usedSourceIndexes = useMemo(() => mappedSourceColumnIndexes(draft.columns), [draft.columns]);
+  const previewRows = useMemo(() => outputPreviewRows(draft.columns, source.sampleRows), [draft.columns, source.sampleRows]);
+  const selectedColumnIndex = draft.columns.findIndex((column) => column.clientId === selectedColumnId);
+  const selectedColumn = selectedColumnIndex >= 0 ? draft.columns[selectedColumnIndex] : null;
+
+  function addColumn(sourceColumnIndex: number, targetIndex = draft.columns.length) {
+    if (!canEdit) return;
+    const sourceHeading = source.headers[sourceColumnIndex];
+    if (sourceHeading === undefined) return;
+    const clientId = newClientId();
+    setDraft((current) => {
+      const appended = addSourceColumn(current.columns, { sourceColumnIndex, sourceHeading }, clientId);
+      return { ...current, columns: targetIndex === current.columns.length ? appended : moveOutputColumn(appended, clientId, targetIndex) };
+    });
+    setSelectedColumnId(clientId);
+    setMessage(null);
+    setError(null);
+  }
+
+  function moveColumn(clientId: string, targetIndex: number) {
+    if (!canEdit) return;
+    setDraft((current) => ({ ...current, columns: moveOutputColumn(current.columns, clientId, targetIndex) }));
+    setMessage(null);
+  }
+
+  function removeColumn(clientId: string) {
+    if (!canEdit) return;
+    setDraft((current) => ({ ...current, columns: removeOutputColumn(current.columns, clientId) }));
+    setSelectedColumnId(null);
+    setMessage(null);
+  }
+
+  function dropIntoOutput(event: DragEvent<HTMLElement>, targetIndex: number) {
+    event.preventDefault();
+    const sourceIndexText = event.dataTransfer.getData(sourceDragType);
+    if (sourceIndexText) {
+      addColumn(Number(sourceIndexText), targetIndex);
+      return;
+    }
+    const clientId = event.dataTransfer.getData(outputDragType);
+    if (clientId) moveColumn(clientId, Math.min(targetIndex, Math.max(0, draft.columns.length - 1)));
+  }
+
+  function saveProfile() {
+    if (!canEdit || isSaving) return;
+    setMessage(null);
+    setError(null);
+    startSaving(async () => {
+      const result = await saveOutputProfileAction({
+        id: draft.id,
+        name: draft.name,
+        sourceWorkbookImportId: draft.sourceWorkbookImportId,
+        sourceWorksheetId: draft.sourceWorksheetId,
+        columns: draft.columns.map(({ sourceColumnIndex, sourceHeading, outputHeading }) => ({ sourceColumnIndex, sourceHeading, outputHeading }))
+      });
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setDraft((current) => ({ ...current, id: result.profileId }));
+      setMessage(result.message);
+      router.replace(`/mapping?profile=${encodeURIComponent(result.profileId)}`);
+      router.refresh();
+    });
+  }
+
+  return (
+    <section className="outputProfileBuilder" aria-label="Output Profile Builder">
+      <div className="card outputProfileIdentity">
+        <label className="field">
+          <span>Output Profile name</span>
+          <input value={draft.name} onChange={(event) => { setDraft((current) => ({ ...current, name: event.target.value })); setMessage(null); }} placeholder="For example, NHS Contract" maxLength={120} disabled={!canEdit} />
+        </label>
+        <div className="outputProfileSaveArea">
+          {message ? <span className="success" role="status">{message}</span> : null}
+          {error ? <span className="error" role="alert">{error}</span> : null}
+          {canEdit ? (
+            <button className="primary" type="button" onClick={saveProfile} disabled={isSaving}>
+              <Save aria-hidden="true" size={18} /> {isSaving ? "Saving" : draft.id ? "Save changes" : "Save draft"}
+            </button>
+          ) : <span className="badge">Read-only access</span>}
+        </div>
+      </div>
+
+      <section className="card spreadsheetCard" aria-labelledby="source-sheet-title">
+        <div className="sheetHeader">
+          <div>
+            <p className="sheetLabel">Source sheet</p>
+            <h2 id="source-sheet-title">{source.workbookFileName}</h2>
+            <p className="muted">Worksheet: {source.worksheetName} · Drag a heading into the output sheet.</p>
+          </div>
+          <span className="badge">3-row preview</span>
+        </div>
+        <div className="outputSheetScroll">
+          <table className="builderSheet sourceBuilderSheet">
+            <thead>
+              <tr>
+                {source.headers.map((heading, sourceColumnIndex) => {
+                  const used = usedSourceIndexes.has(sourceColumnIndex);
+                  return (
+                    <th className={used ? "sourceHeadingCell used" : "sourceHeadingCell"} draggable={canEdit} key={`${heading}-${sourceColumnIndex}`} onDragStart={(event) => {
+                      event.dataTransfer.setData(sourceDragType, String(sourceColumnIndex));
+                      event.dataTransfer.effectAllowed = "copy";
+                    }}>
+                      <div className="sourceHeadingContent">
+                        <span>{heading}</span>
+                        {used ? <span className="mappedMarker"><Check aria-hidden="true" size={13} /> Used</span> : null}
+                      </div>
+                      {canEdit ? <button className="sheetIconButton" type="button" onClick={() => addColumn(sourceColumnIndex)} aria-label={`Add ${heading} to output`}><Plus aria-hidden="true" size={15} /></button> : null}
+                    </th>
+                  );
+                })}
+              </tr>
+            </thead>
+            <tbody>
+              {source.sampleRows.map((row, rowIndex) => <tr key={rowIndex}>{source.headers.map((heading, columnIndex) => <td key={`${heading}-${columnIndex}`}>{row[columnIndex] ?? ""}</td>)}</tr>)}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <div className="sheetDirection" aria-hidden="true"><span>Drag headings down</span></div>
+
+      <section className="card spreadsheetCard outputSpreadsheetCard" aria-labelledby="output-sheet-title">
+        <div className="sheetHeader">
+          <div>
+            <p className="sheetLabel">Output sheet</p>
+            <h2 id="output-sheet-title">{draft.name.trim() || "Untitled Output Profile"}</h2>
+            <p className="muted">Arrange the columns exactly as they should appear in the future output file.</p>
+          </div>
+          <span className="badge">{draft.columns.length} columns</span>
+        </div>
+        <div className={draft.columns.length === 0 ? "outputSheetScroll emptyOutputDropzone" : "outputSheetScroll"} onDragOver={(event) => { if (canEdit) event.preventDefault(); }} onDrop={(event) => dropIntoOutput(event, draft.columns.length)}>
+          {draft.columns.length > 0 ? (
+            <table className="builderSheet outputBuilderSheet">
+              <thead>
+                <tr>
+                  {draft.columns.map((column, index) => {
+                    const customised = column.outputHeading !== column.sourceHeading;
+                    return (
+                      <th className={`${selectedColumnId === column.clientId ? "outputHeadingCell selected" : "outputHeadingCell"}${customised ? " customised" : ""}`} draggable={canEdit} key={column.clientId} onDragOver={(event) => { if (canEdit) event.preventDefault(); }} onDrop={(event) => { event.stopPropagation(); dropIntoOutput(event, index); }} onDragStart={(event) => {
+                        event.dataTransfer.setData(outputDragType, column.clientId);
+                        event.dataTransfer.effectAllowed = "move";
+                      }}>
+                        <button className="outputHeadingButton" type="button" onClick={() => setSelectedColumnId(column.clientId)}>
+                          <GripVertical aria-hidden="true" size={15} />
+                          <span><strong>{column.outputHeading || "Untitled column"}</strong><small>from {column.sourceHeading}</small></span>
+                          {customised ? <span className="customisedMarker">Customised</span> : null}
+                        </button>
+                      </th>
+                    );
+                  })}
+                </tr>
+              </thead>
+              <tbody>
+                {previewRows.map((row, rowIndex) => <tr key={rowIndex}>{row.map((cell, columnIndex) => <td key={`${draft.columns[columnIndex].clientId}-${rowIndex}`}>{cell}</td>)}</tr>)}
+              </tbody>
+            </table>
+          ) : (
+            <div className="emptyOutputMessage"><Plus aria-hidden="true" size={24} /><strong>Drop a source heading here</strong><span>Or use the + button on any source heading.</span></div>
+          )}
+        </div>
+
+        {selectedColumn ? (
+          <div className="outputColumnInspector" aria-label="Selected output column settings">
+            <label className="field">
+              <span>Output heading</span>
+              <input value={selectedColumn.outputHeading} maxLength={200} disabled={!canEdit} onChange={(event) => setDraft((current) => ({ ...current, columns: renameOutputColumn(current.columns, selectedColumn.clientId, event.target.value) }))} />
+            </label>
+            <div className="sourceHeadingReference"><span>Original source heading</span><strong>{selectedColumn.sourceHeading}</strong></div>
+            {canEdit ? (
+              <div className="actions outputColumnActions">
+                <button className="secondary" type="button" onClick={() => moveColumn(selectedColumn.clientId, selectedColumnIndex - 1)} disabled={selectedColumnIndex === 0}><ChevronLeft aria-hidden="true" size={16} /> Move left</button>
+                <button className="secondary" type="button" onClick={() => moveColumn(selectedColumn.clientId, selectedColumnIndex + 1)} disabled={selectedColumnIndex === draft.columns.length - 1}>Move right <ChevronRight aria-hidden="true" size={16} /></button>
+                <button className="dangerButton" type="button" onClick={() => removeColumn(selectedColumn.clientId)}><Trash2 aria-hidden="true" size={16} /> Remove column</button>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </section>
+    </section>
+  );
+}

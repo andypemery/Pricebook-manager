@@ -59,24 +59,24 @@ export function createWorksheetSummary(name: string, worksheet: ExcelJS.Workshee
   };
 }
 
-export function createWorksheetPreview(name: string, worksheet: ExcelJS.Worksheet, summary: WorksheetSummary): WorksheetPreview {
+export function createWorksheetPreview(name: string, worksheet: ExcelJS.Worksheet, summary: WorksheetSummary, rowLimit = previewRowLimit): WorksheetPreview {
   if (summary.rowCount === 0 || summary.detectedHeaderRow === null) {
     return {
       worksheetName: name,
       headers: summary.headers,
       rows: [],
       sourceRowCount: summary.rowCount,
-      previewRowLimit
+      previewRowLimit: rowLimit
     };
   }
 
-  const rows = rowMatrix(worksheet, summary.columnCount, summary.detectedHeaderRow + previewRowLimit);
-  const dataRows = rows.slice(summary.detectedHeaderRow, summary.detectedHeaderRow + previewRowLimit);
+  const rows = rowMatrix(worksheet, summary.columnCount, summary.detectedHeaderRow + rowLimit);
+  const dataRows = rows.slice(summary.detectedHeaderRow, summary.detectedHeaderRow + rowLimit);
   return {
     worksheetName: name,
     headers: summary.headers,
     rows: dataRows.map((row) => Array.from({ length: summary.columnCount }, (_, index) => row[index] ?? "")),
     sourceRowCount: summary.rowCount,
-    previewRowLimit
+    previewRowLimit: rowLimit
   };
 }

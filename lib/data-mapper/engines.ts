@@ -27,9 +27,9 @@ export const dataMapperEngines: DataMapperEngineDefinition[] = [
   },
   {
     key: "mapping",
-    name: "Mapping engine",
-    purpose: "Map source workbook headers into target export schemas.",
-    status: "placeholder"
+    name: "Output Profile Builder",
+    purpose: "Arrange source workbook headings into reusable visual output definitions.",
+    status: "ready"
   },
   {
     key: "formula",
