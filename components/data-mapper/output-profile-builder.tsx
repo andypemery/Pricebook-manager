@@ -7,7 +7,13 @@ import { OutputColumnInspector } from "@/components/data-mapper/output-column-in
 import { OutputProfileFilters } from "@/components/data-mapper/output-profile-filters";
 import { OutputProfileManager } from "@/components/data-mapper/output-profile-manager";
 import { OutputProfileSettings } from "@/components/data-mapper/output-profile-settings";
+import { useUnsavedProfileProtection } from "@/components/data-mapper/use-unsaved-profile-protection";
 import { saveOutputProfileAction } from "@/lib/actions/output-profile.actions";
+import {
+  outputProfileDraftFingerprint,
+  outputProfileHasUnsavedChanges,
+  saveInputFromOutputProfileDraft
+} from "@/lib/data-mapper/output-profiles/draft-state";
 import {
   addFilter,
   addSourceColumn,
@@ -40,16 +46,21 @@ export function OutputProfileBuilder({ source, initialDraft, profiles, initialEf
   const router = useRouter();
   const profileNameInput = useRef<HTMLInputElement>(null);
   const [draft, setDraft] = useState(initialDraft);
+  const [savedFingerprint, setSavedFingerprint] = useState(() => outputProfileDraftFingerprint(initialDraft));
   const [effectiveDate, setEffectiveDate] = useState(initialEffectiveDate);
+  const [isDragging, setIsDragging] = useState(false);
   const [selectedColumnId, setSelectedColumnId] = useState<string | null>(initialDraft.columns[0]?.clientId ?? null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, startSaving] = useTransition();
+  const canInteract = canEdit && !isSaving;
   const usedSourceIndexes = useMemo(() => mappedSourceColumnIndexes(draft.columns), [draft.columns]);
   const preview = useMemo(
     () => buildOutputPreview(draft.columns, source.sampleRows, draft.filters, draft.filterMatchMode),
     [draft.columns, draft.filterMatchMode, draft.filters, source.sampleRows]
   );
+  const isDirty = useMemo(() => outputProfileHasUnsavedChanges(draft, savedFingerprint), [draft, savedFingerprint]);
+  useUnsavedProfileProtection(isDirty);
   const selectedColumnIndex = draft.columns.findIndex((column) => column.clientId === selectedColumnId);
   const selectedColumn = selectedColumnIndex >= 0 ? draft.columns[selectedColumnIndex] : null;
 
@@ -59,7 +70,7 @@ export function OutputProfileBuilder({ source, initialDraft, profiles, initialEf
   }
 
   function addColumn(sourceColumnIndex: number, targetIndex = draft.columns.length) {
-    if (!canEdit) return;
+    if (!canInteract) return;
     const sourceHeading = source.headers[sourceColumnIndex];
     if (sourceHeading === undefined) return;
     const clientId = newClientId();
@@ -72,7 +83,7 @@ export function OutputProfileBuilder({ source, initialDraft, profiles, initialEf
   }
 
   function addFixedColumn() {
-    if (!canEdit) return;
+    if (!canInteract) return;
     const clientId = newClientId();
     setDraft((current) => ({ ...current, columns: addStaticColumn(current.columns, clientId) }));
     setSelectedColumnId(clientId);
@@ -80,13 +91,13 @@ export function OutputProfileBuilder({ source, initialDraft, profiles, initialEf
   }
 
   function moveColumn(clientId: string, targetIndex: number) {
-    if (!canEdit) return;
+    if (!canInteract) return;
     setDraft((current) => ({ ...current, columns: moveOutputColumn(current.columns, clientId, targetIndex) }));
     setMessage(null);
   }
 
   function removeColumn(clientId: string) {
-    if (!canEdit) return;
+    if (!canInteract) return;
     setDraft((current) => ({ ...current, columns: removeOutputColumn(current.columns, clientId) }));
     setSelectedColumnId(null);
     resetSaveState();
@@ -104,7 +115,7 @@ export function OutputProfileBuilder({ source, initialDraft, profiles, initialEf
   }
 
   function addProfileFilter() {
-    if (!canEdit || source.headers.length === 0) return;
+    if (!canInteract || source.headers.length === 0) return;
     setDraft((current) => ({
       ...current,
       filters: addFilter(current.filters, { sourceColumnIndex: 0, sourceHeading: source.headers[0] }, newClientId())
@@ -114,40 +125,16 @@ export function OutputProfileBuilder({ source, initialDraft, profiles, initialEf
 
   function saveProfile() {
     if (!canEdit || isSaving) return;
+    const submittedDraft = draft;
+    const submittedFingerprint = outputProfileDraftFingerprint(submittedDraft);
     resetSaveState();
     startSaving(async () => {
-      const result = await saveOutputProfileAction({
-        id: draft.id,
-        name: draft.name,
-        filenameTemplate: draft.filenameTemplate,
-        outputFormat: draft.outputFormat,
-        csvDelimiter: draft.csvDelimiter,
-        csvIncludeHeader: draft.csvIncludeHeader,
-        xlsxWorksheetName: draft.xlsxWorksheetName,
-        sourceWorkbookImportId: draft.sourceWorkbookImportId,
-        sourceWorksheetId: draft.sourceWorksheetId,
-        columns: draft.columns.map((column) => ({
-          columnType: column.columnType,
-          sourceColumnIndex: column.sourceColumnIndex,
-          sourceHeading: column.sourceHeading,
-          outputHeading: column.outputHeading,
-          staticValue: column.staticValue,
-          adjustmentType: column.adjustmentType,
-          adjustmentValue: column.adjustmentValue,
-          roundingDecimalPlaces: column.roundingDecimalPlaces
-        })),
-        filterMatchMode: draft.filterMatchMode,
-        filters: draft.filters.map((filter) => ({
-          sourceColumnIndex: filter.sourceColumnIndex,
-          sourceHeading: filter.sourceHeading,
-          operator: filter.operator,
-          comparisonValue: filter.comparisonValue
-        }))
-      });
+      const result = await saveOutputProfileAction(saveInputFromOutputProfileDraft(submittedDraft));
       if (!result.ok) {
         setError(result.error);
         return;
       }
+      setSavedFingerprint(submittedFingerprint);
       setDraft((current) => ({ ...current, id: result.profileId }));
       setMessage(result.message);
       router.replace(`/mapping?profile=${encodeURIComponent(result.profileId)}`);
@@ -169,20 +156,23 @@ export function OutputProfileBuilder({ source, initialDraft, profiles, initialEf
         sourceWorkbookImportId={draft.sourceWorkbookImportId}
         sourceWorksheetId={draft.sourceWorksheetId}
         currentProfileName={draft.name}
+        isDirty={isDirty}
         canEdit={canEdit}
+        isBusy={isSaving}
         onRename={() => { profileNameInput.current?.focus(); profileNameInput.current?.select(); }}
       />
 
       <div className="card outputProfileIdentity">
         <label className="field">
           <span>Output Profile name</span>
-          <input ref={profileNameInput} value={draft.name} onChange={(event) => { setDraft((current) => ({ ...current, name: event.target.value })); resetSaveState(); }} placeholder="For example, NHS Contract" maxLength={120} disabled={!canEdit} />
+          <input ref={profileNameInput} value={draft.name} onChange={(event) => { setDraft((current) => ({ ...current, name: event.target.value })); resetSaveState(); }} placeholder="For example, NHS Contract" maxLength={120} disabled={!canInteract} />
         </label>
         <div className="outputProfileSaveArea">
+          {isDirty ? <span className="unsavedIndicator" role="status">Unsaved changes</span> : null}
           {message ? <span className="success" role="status">{message}</span> : null}
           {error ? <span className="error" role="alert">{error}</span> : null}
           {canEdit ? (
-            <button className="primary" type="button" onClick={saveProfile} disabled={isSaving}>
+            <button className="primary" type="button" onClick={saveProfile} disabled={isSaving || (draft.id !== null && !isDirty)}>
               <Save aria-hidden="true" size={18} /> {isSaving ? "Saving" : draft.id ? "Save changes" : "Save draft"}
             </button>
           ) : <span className="badge">Read-only access</span>}
@@ -194,7 +184,7 @@ export function OutputProfileBuilder({ source, initialDraft, profiles, initialEf
           <div>
             <p className="sheetLabel">Source sheet</p>
             <h2 id="source-sheet-title">{source.workbookFileName}</h2>
-            <p className="muted">Worksheet: {source.worksheetName} · Drag a heading into the output sheet.</p>
+            <p className="muted">Worksheet: {source.worksheetName} · Drag a heading or use Add. Used fields remain available for reuse.</p>
           </div>
           <span className="badge">3-row preview</span>
         </div>
@@ -205,15 +195,16 @@ export function OutputProfileBuilder({ source, initialDraft, profiles, initialEf
                 {source.headers.map((heading, sourceColumnIndex) => {
                   const used = usedSourceIndexes.has(sourceColumnIndex);
                   return (
-                    <th className={used ? "sourceHeadingCell used" : "sourceHeadingCell"} draggable={canEdit} key={`${heading}-${sourceColumnIndex}`} onDragStart={(event) => {
+                    <th className={used ? "sourceHeadingCell used" : "sourceHeadingCell"} draggable={canInteract} key={`${heading}-${sourceColumnIndex}`} onDragEnd={() => setIsDragging(false)} onDragStart={(event) => {
                       event.dataTransfer.setData(sourceDragType, String(sourceColumnIndex));
                       event.dataTransfer.effectAllowed = "copy";
+                      setIsDragging(true);
                     }}>
                       <div className="sourceHeadingContent">
                         <span>{heading}</span>
                         {used ? <span className="mappedMarker"><Check aria-hidden="true" size={13} /> Used</span> : null}
                       </div>
-                      {canEdit ? <button className="sheetIconButton" type="button" onClick={() => addColumn(sourceColumnIndex)} aria-label={`Add ${heading} to output`}><Plus aria-hidden="true" size={15} /></button> : null}
+                      {canInteract ? <button className="sheetIconButton" type="button" onClick={() => addColumn(sourceColumnIndex)} aria-label={`Add ${heading} to output`}><Plus aria-hidden="true" size={15} /></button> : null}
                     </th>
                   );
                 })}
@@ -233,14 +224,14 @@ export function OutputProfileBuilder({ source, initialDraft, profiles, initialEf
           <div>
             <p className="sheetLabel">Output sheet</p>
             <h2 id="output-sheet-title">{draft.name.trim() || "Untitled Output Profile"}</h2>
-            <p className="muted">Arrange fields, then optionally adjust values or add fixed output columns.</p>
+            <p className="muted">Arrange fields, select a heading to rename or configure it, then add fixed values and filters if needed.</p>
           </div>
           <div className="sheetHeaderActions">
             <span className="badge">{draft.columns.length} columns</span>
-            {canEdit ? <button className="secondary" type="button" onClick={addFixedColumn}><Plus aria-hidden="true" size={16} /> Add fixed column</button> : null}
+            {canInteract ? <button className="secondary" type="button" onClick={addFixedColumn}><Plus aria-hidden="true" size={16} /> Add fixed column</button> : null}
           </div>
         </div>
-        <div className={draft.columns.length === 0 ? "outputSheetScroll emptyOutputDropzone" : "outputSheetScroll"} onDragOver={(event) => { if (canEdit) event.preventDefault(); }} onDrop={(event) => dropIntoOutput(event, draft.columns.length)}>
+        <div className={`${draft.columns.length === 0 ? "outputSheetScroll emptyOutputDropzone" : "outputSheetScroll"}${isDragging ? " dragTargetActive" : ""}`} onDragOver={(event) => { if (canInteract) event.preventDefault(); }} onDrop={(event) => { setIsDragging(false); dropIntoOutput(event, draft.columns.length); }}>
           {draft.columns.length > 0 ? (
             <table className="builderSheet outputBuilderSheet">
               <thead>
@@ -249,9 +240,10 @@ export function OutputProfileBuilder({ source, initialDraft, profiles, initialEf
                     const customised = column.columnType === "SOURCE" && column.outputHeading !== column.sourceHeading;
                     const ruleDescription = describeColumnRule(column);
                     return (
-                      <th className={`${selectedColumnId === column.clientId ? "outputHeadingCell selected" : "outputHeadingCell"}${customised || column.columnType === "STATIC" ? " customised" : ""}`} draggable={canEdit} key={column.clientId} onDragOver={(event) => { if (canEdit) event.preventDefault(); }} onDrop={(event) => { event.stopPropagation(); dropIntoOutput(event, index); }} onDragStart={(event) => {
+                      <th className={`${selectedColumnId === column.clientId ? "outputHeadingCell selected" : "outputHeadingCell"}${customised || column.columnType === "STATIC" ? " customised" : ""}`} draggable={canInteract} key={column.clientId} onDragEnd={() => setIsDragging(false)} onDragOver={(event) => { if (canInteract) event.preventDefault(); }} onDrop={(event) => { event.stopPropagation(); setIsDragging(false); dropIntoOutput(event, index); }} onDragStart={(event) => {
                         event.dataTransfer.setData(outputDragType, column.clientId);
                         event.dataTransfer.effectAllowed = "move";
+                        setIsDragging(true);
                       }}>
                         <button className="outputHeadingButton" type="button" onClick={() => setSelectedColumnId(column.clientId)}>
                           <GripVertical aria-hidden="true" size={15} />
@@ -295,7 +287,7 @@ export function OutputProfileBuilder({ source, initialDraft, profiles, initialEf
             column={selectedColumn}
             columnIndex={selectedColumnIndex}
             columnCount={draft.columns.length}
-            canEdit={canEdit}
+            canEdit={canInteract}
             onChange={updateSelectedColumn}
             onMove={(targetIndex) => moveColumn(selectedColumn.clientId, targetIndex)}
             onRemove={() => removeColumn(selectedColumn.clientId)}
@@ -307,7 +299,7 @@ export function OutputProfileBuilder({ source, initialDraft, profiles, initialEf
         headers={source.headers}
         filters={draft.filters}
         matchMode={draft.filterMatchMode}
-        canEdit={canEdit}
+        canEdit={canInteract}
         onAdd={addProfileFilter}
         onChange={(clientId, changes) => { setDraft((current) => ({ ...current, filters: updateFilter(current.filters, clientId, changes) })); resetSaveState(); }}
         onMove={(clientId, targetIndex) => { setDraft((current) => ({ ...current, filters: moveFilter(current.filters, clientId, targetIndex) })); setMessage(null); }}
@@ -319,7 +311,7 @@ export function OutputProfileBuilder({ source, initialDraft, profiles, initialEf
         profile={draft}
         sourceFilename={source.workbookFileName}
         effectiveDate={effectiveDate}
-        canEdit={canEdit}
+        canEdit={canInteract}
         onChange={(changes) => { setDraft((current) => ({ ...current, ...changes })); resetSaveState(); }}
         onEffectiveDateChange={setEffectiveDate}
       />

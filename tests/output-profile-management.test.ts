@@ -124,6 +124,8 @@ describe("reusable Output Profile management", () => {
     expect(workspace.profiles.map((profile) => profile.name)).toEqual(["NHS", "Education"]);
     expect(findProfiles.mock.calls[0]?.[0].where).toEqual({ tenantId: "tenant-1" });
     expect(findProfiles.mock.calls[0]?.[0].select.sourceWorksheet.select).toEqual({ name: true });
+    expect((db.sourceWorkbookImport.findMany as ReturnType<typeof vi.fn>).mock.calls[0]?.[0].select.worksheets.select)
+      .toEqual({ id: true, name: true, columnCount: true });
   });
 
   it("switches by loading independent tenant-scoped profile definitions", async () => {

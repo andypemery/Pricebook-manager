@@ -93,7 +93,7 @@ export async function listOutputProfileWorkspace(db: PrismaClient, tenantId: str
         originalFileName: true,
         validationStatus: true,
         validatedAt: true,
-        worksheets: { orderBy: { position: "asc" }, select: { id: true, name: true, rowCount: true, columnCount: true } }
+        worksheets: { orderBy: { position: "asc" }, select: { id: true, name: true, columnCount: true } }
       }
     })
   ]);

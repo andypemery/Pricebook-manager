@@ -4,6 +4,12 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Copy, Pencil, Plus, Trash2 } from "lucide-react";
 import { deleteOutputProfileAction, duplicateOutputProfileAction } from "@/lib/actions/output-profile.actions";
+import {
+  approvePendingProfileContextChange,
+  cancelPendingProfileContextChange,
+  requestProfileContextChange,
+  type ProfileContextIntent
+} from "@/lib/data-mapper/output-profiles/draft-state";
 import type { OutputProfileSummary } from "@/lib/data-mapper/output-profiles/types";
 
 export function OutputProfileManager({
@@ -12,7 +18,9 @@ export function OutputProfileManager({
   sourceWorkbookImportId,
   sourceWorksheetId,
   currentProfileName,
+  isDirty,
   canEdit,
+  isBusy,
   onRename
 }: {
   profiles: OutputProfileSummary[];
@@ -20,17 +28,21 @@ export function OutputProfileManager({
   sourceWorkbookImportId: string;
   sourceWorksheetId: string;
   currentProfileName: string;
+  isDirty: boolean;
   canEdit: boolean;
+  isBusy: boolean;
   onRename: () => void;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [pendingIntent, setPendingIntent] = useState<ProfileContextIntent | null>(null);
   const [error, setError] = useState<string | null>(null);
   const newProfileUrl = `/mapping?source=${encodeURIComponent(sourceWorkbookImportId)}&worksheet=${encodeURIComponent(sourceWorksheetId)}`;
+  const confirmationOpen = pendingIntent !== null || confirmingDelete;
 
   function duplicateProfile() {
-    if (!activeProfileId || isPending) return;
+    if (!activeProfileId || isPending || isBusy) return;
     setError(null);
     startTransition(async () => {
       const result = await duplicateOutputProfileAction(activeProfileId);
@@ -43,8 +55,38 @@ export function OutputProfileManager({
     });
   }
 
+  function performContextIntent(intent: ProfileContextIntent) {
+    if (intent.type === "NEW") {
+      router.push(newProfileUrl);
+      return;
+    }
+    if (intent.type === "SWITCH") {
+      router.push(`/mapping?profile=${encodeURIComponent(intent.profileId)}`);
+      return;
+    }
+    duplicateProfile();
+  }
+
+  function requestContextIntent(intent: ProfileContextIntent) {
+    setConfirmingDelete(false);
+    const decision = requestProfileContextChange(isDirty, intent);
+    setPendingIntent(decision.pendingIntent);
+    if (decision.approvedIntent) performContextIntent(decision.approvedIntent);
+  }
+
+  function discardAndContinue() {
+    const decision = approvePendingProfileContextChange(pendingIntent);
+    setPendingIntent(decision.pendingIntent);
+    if (decision.approvedIntent) performContextIntent(decision.approvedIntent);
+  }
+
+  function stayHere() {
+    const decision = cancelPendingProfileContextChange();
+    setPendingIntent(decision.pendingIntent);
+  }
+
   function deleteProfile() {
-    if (!activeProfileId || isPending) return;
+    if (!activeProfileId || isPending || isBusy) return;
     setError(null);
     startTransition(async () => {
       const result = await deleteOutputProfileAction(activeProfileId);
@@ -70,32 +112,41 @@ export function OutputProfileManager({
       <div className="profileManagerControls">
         <label className="field profileSelector">
           <span>Currently editing</span>
-          <select value={activeProfileId ?? ""} onChange={(event) => {
+          <select value={activeProfileId ?? ""} disabled={confirmationOpen || isBusy} onChange={(event) => {
             const profileId = event.target.value;
-            router.push(profileId ? `/mapping?profile=${encodeURIComponent(profileId)}` : newProfileUrl);
+            if (profileId) requestContextIntent({ type: "SWITCH", profileId });
           }}>
             {!activeProfileId ? <option value="">New unsaved profile</option> : null}
             {profiles.map((profile) => <option value={profile.id} key={profile.id}>{profile.name} · {profile.outputFormat}</option>)}
           </select>
         </label>
         <div className="profileManagerActions">
-          <button className="secondary" type="button" onClick={() => router.push(newProfileUrl)} disabled={!canEdit || !activeProfileId || isPending}>
+          <button className="secondary" type="button" onClick={() => requestContextIntent({ type: "NEW" })} disabled={!canEdit || !activeProfileId || isPending || isBusy || confirmationOpen}>
             <Plus aria-hidden="true" size={16} /> New Output Profile
           </button>
-          <button className="secondary" type="button" onClick={duplicateProfile} disabled={!canEdit || !activeProfileId || isPending}>
+          <button className="secondary" type="button" onClick={() => requestContextIntent({ type: "DUPLICATE" })} disabled={!canEdit || !activeProfileId || isPending || isBusy || confirmationOpen}>
             <Copy aria-hidden="true" size={16} /> Duplicate Profile
           </button>
-          <button className="secondary" type="button" onClick={onRename} disabled={!canEdit || isPending}>
+          <button className="secondary" type="button" onClick={onRename} disabled={!canEdit || isPending || isBusy || confirmationOpen}>
             <Pencil aria-hidden="true" size={16} /> Rename Profile
           </button>
-          <button className="dangerButton" type="button" onClick={() => setConfirmingDelete(true)} disabled={!canEdit || !activeProfileId || isPending}>
+          <button className="dangerButton" type="button" onClick={() => setConfirmingDelete(true)} disabled={!canEdit || !activeProfileId || isPending || isBusy || confirmationOpen}>
             <Trash2 aria-hidden="true" size={16} /> Delete Profile
           </button>
         </div>
       </div>
+      {pendingIntent ? (
+        <div className="discardConfirmation" role="alert">
+          <span>You have unsaved changes. Discard them and {pendingIntent.type === "NEW" ? "create a new profile" : pendingIntent.type === "DUPLICATE" ? "duplicate the last saved profile" : "switch profiles"}?</span>
+          <div className="actions">
+            <button className="secondary" type="button" onClick={stayHere}>Stay here</button>
+            <button className="dangerButton" type="button" onClick={discardAndContinue}>Discard changes and continue</button>
+          </div>
+        </div>
+      ) : null}
       {confirmingDelete ? (
         <div className="deleteConfirmation" role="alert">
-          <span>Delete <strong>{currentProfileName}</strong>? Its source workbook and other profiles will not be changed.</span>
+          <span>Delete <strong>{currentProfileName}</strong>? Its source workbook and other profiles will not be changed.{isDirty ? " Your unsaved edits will also be discarded." : ""}</span>
           <div className="actions">
             <button className="secondary" type="button" onClick={() => setConfirmingDelete(false)} disabled={isPending}>Cancel</button>
             <button className="dangerButton" type="button" onClick={deleteProfile} disabled={isPending}>{isPending ? "Deleting" : "Delete profile"}</button>

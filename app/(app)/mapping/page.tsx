@@ -32,8 +32,7 @@ export default async function MappingPage({ searchParams }: { searchParams: Mapp
       name: profile.name,
       sourceWorkbookImportId: profile.sourceWorkbookImportId,
       sourceWorksheetId: profile.sourceWorksheetId,
-      outputFormat: profile.outputFormat,
-      outputColumnCount: profile._count.columns
+      outputFormat: profile.outputFormat
     })) : [];
 
   return (

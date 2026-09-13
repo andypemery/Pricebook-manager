@@ -71,12 +71,13 @@ export function OutputProfileSettings({
           {attentionIssues.length === 0 ? "Ready" : "Needs attention"}
         </span>
       </div>
+      <p className="profileReadinessNote">Profile readiness checks this reusable configuration only. Source workbook validation is reported separately.</p>
 
       <div className="outputSettingsGrid">
         <label className="field filenameTemplateField">
           <span>Output filename template</span>
           <input ref={filenameInput} value={profile.filenameTemplate} onChange={(event) => onChange({ filenameTemplate: event.target.value })} maxLength={200} disabled={!canEdit} />
-          <small>Stored without an extension. The selected format adds it automatically.</small>
+          <small>The tokenised template is saved without an extension. The selected format adds it automatically.</small>
         </label>
         <label className="field tokenInsertField">
           <span>Insert token</span>
@@ -88,7 +89,7 @@ export function OutputProfileSettings({
         <label className="field">
           <span>Effective preview date</span>
           <input type="date" value={effectiveDate} onChange={(event) => onEffectiveDateChange(event.target.value)} />
-          <small>Preview-only run context; this date is not saved in the profile.</small>
+          <small>Preview-only run context; changing this date never replaces or saves the template tokens.</small>
         </label>
         <label className="field">
           <span>Output format</span>

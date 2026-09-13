@@ -105,5 +105,4 @@ export type OutputProfileSummary = {
   sourceWorkbookImportId: string;
   sourceWorksheetId: string;
   outputFormat: OutputProfileFormat;
-  outputColumnCount: number;
 };
