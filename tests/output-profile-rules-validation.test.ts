@@ -19,6 +19,11 @@ function sourceColumn(overrides: Record<string, unknown> = {}) {
 function input(overrides: Partial<SaveOutputProfileInput> = {}): SaveOutputProfileInput {
   return {
     name: "NHS Contract",
+    filenameTemplate: "{profile}_{date}",
+    outputFormat: "CSV",
+    csvDelimiter: "COMMA",
+    csvIncludeHeader: true,
+    xlsxWorksheetName: "",
     sourceWorkbookImportId: "source-1",
     sourceWorksheetId: "worksheet-1",
     columns: [sourceColumn()],

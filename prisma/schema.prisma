@@ -121,6 +121,18 @@ enum OutputProfileFilterOperator {
   LESS_THAN_OR_EQUAL
 }
 
+enum OutputProfileFormat {
+  CSV
+  XLSX
+}
+
+enum OutputProfileCsvDelimiter {
+  COMMA
+  SEMICOLON
+  TAB
+  PIPE
+}
+
 model Tenant {
   id        String       @id @default(cuid())
   name      String
@@ -716,6 +728,11 @@ model OutputProfile {
   sourceWorksheet        SourceWorksheet              @relation(fields: [sourceWorksheetId], references: [id])
   name                   String
   filterMatchMode        OutputProfileFilterMatchMode @default(ALL)
+  filenameTemplate       String                       @default("{profile}_{date}")
+  outputFormat           OutputProfileFormat          @default(CSV)
+  csvDelimiter           OutputProfileCsvDelimiter    @default(COMMA)
+  csvIncludeHeader       Boolean                      @default(true)
+  xlsxWorksheetName      String?
   createdById            String?
   createdBy              User?                        @relation("OutputProfileCreator", fields: [createdById], references: [id])
   updatedById            String?

@@ -26,6 +26,12 @@ export const filterOperators = [
 ] as const;
 export type OutputProfileFilterOperator = (typeof filterOperators)[number];
 
+export const outputFormats = ["CSV", "XLSX"] as const;
+export type OutputProfileFormat = (typeof outputFormats)[number];
+
+export const csvDelimiters = ["COMMA", "SEMICOLON", "TAB", "PIPE"] as const;
+export type OutputProfileCsvDelimiter = (typeof csvDelimiters)[number];
+
 export type SourceWorksheetPreview = {
   id: string;
   sourceWorkbookImportId: string;
@@ -58,6 +64,11 @@ export type OutputProfileFilterDraft = {
 export type OutputProfileDraft = {
   id: string | null;
   name: string;
+  filenameTemplate: string;
+  outputFormat: OutputProfileFormat;
+  csvDelimiter: OutputProfileCsvDelimiter;
+  csvIncludeHeader: boolean;
+  xlsxWorksheetName: string;
   sourceWorkbookImportId: string;
   sourceWorksheetId: string;
   columns: OutputProfileColumnDraft[];
@@ -68,6 +79,11 @@ export type OutputProfileDraft = {
 export type SaveOutputProfileInput = {
   id?: string | null;
   name: string;
+  filenameTemplate: string;
+  outputFormat: OutputProfileFormat;
+  csvDelimiter: OutputProfileCsvDelimiter;
+  csvIncludeHeader: boolean;
+  xlsxWorksheetName: string;
   sourceWorkbookImportId: string;
   sourceWorksheetId: string;
   columns: Array<Omit<OutputProfileColumnDraft, "clientId">>;
@@ -78,3 +94,16 @@ export type SaveOutputProfileInput = {
 export type SaveOutputProfileResult =
   | { ok: true; profileId: string; message: string }
   | { ok: false; error: string };
+
+export type OutputProfileMutationResult =
+  | { ok: true; profileId: string; message: string }
+  | { ok: false; error: string };
+
+export type OutputProfileSummary = {
+  id: string;
+  name: string;
+  sourceWorkbookImportId: string;
+  sourceWorksheetId: string;
+  outputFormat: OutputProfileFormat;
+  outputColumnCount: number;
+};

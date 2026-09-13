@@ -209,8 +209,14 @@ export function buildOutputPreview(
   matchMode: OutputProfileFilterMatchMode
 ) {
   const matchingSourceRows = filterSourceRows(sampleRows, filters, matchMode);
+  const negativeAdjustedSample = matchingSourceRows.some((sourceRow) => columns.some((column) => {
+    if (column.columnType !== "SOURCE" || column.adjustmentType === "NONE") return false;
+    const transformed = outputValueForColumn(column, sourceRow);
+    return (parseDecimal(transformed)?.coefficient ?? 0n) < 0n;
+  }));
   return {
     matchingSourceRows,
-    outputRows: matchingSourceRows.map((sourceRow) => columns.map((column) => outputValueForColumn(column, sourceRow)))
+    outputRows: matchingSourceRows.map((sourceRow) => columns.map((column) => outputValueForColumn(column, sourceRow))),
+    negativeAdjustedSample
   };
 }

@@ -43,6 +43,14 @@ describe("shared Output Profile rule engine", () => {
     expect(transformNumericValue("10", "DIVIDE", "4", 2)).toBe("2.50");
   });
 
+  it("flags only adjusted negative values in the current compact sample", () => {
+    const columns = addSourceColumn([], { sourceColumnIndex: 0, sourceHeading: "Value" }, "source");
+    const adjusted = updateOutputColumn(columns, "source", { adjustmentType: "PERCENT_DECREASE", adjustmentValue: "125" });
+
+    expect(buildOutputPreview(adjusted, [["100"], ["50"], ["20"]], [], "ALL").negativeAdjustedSample).toBe(true);
+    expect(buildOutputPreview(columns, [["-100"]], [], "ALL").negativeAdjustedSample).toBe(false);
+  });
+
   it("supports text equality, inequality, contains and starts-with filters", () => {
     const row = ["A100", "Network Switch", "Yes"];
     expect(sourceRowMatchesFilter(row, filter())).toBe(true);

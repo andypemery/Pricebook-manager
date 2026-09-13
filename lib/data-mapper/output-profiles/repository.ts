@@ -15,16 +15,21 @@ export async function saveOutputProfileForTenant(
       sourceWorkbookImportId: input.sourceWorkbookImportId,
       sourceWorkbookImport: { tenantId: actor.tenantId }
     },
-    select: { headers: true }
+    select: { headers: true, sourceWorkbookImport: { select: { originalFileName: true } } }
   });
   if (!sourceWorksheet) throw new OutputProfileNotFoundError("The selected source worksheet is not available.");
 
   const canonicalHeaders = stringArrayFromJson(sourceWorksheet.headers, "Source headings");
-  const valid = validateOutputProfileInput(input, canonicalHeaders);
+  const valid = validateOutputProfileInput(input, canonicalHeaders, sourceWorksheet.sourceWorkbookImport.originalFileName);
   const columnData = valid.columns.map((column, position) => ({ ...column, position }));
   const filterData = valid.filters.map((filter, position) => ({ ...filter, position }));
   const configuration = {
     name: valid.name,
+    filenameTemplate: valid.filenameTemplate,
+    outputFormat: valid.outputFormat,
+    csvDelimiter: valid.csvDelimiter,
+    csvIncludeHeader: valid.csvIncludeHeader,
+    xlsxWorksheetName: valid.xlsxWorksheetName,
     sourceWorkbookImportId: valid.sourceWorkbookImportId,
     sourceWorksheetId: valid.sourceWorksheetId,
     filterMatchMode: valid.filterMatchMode,
@@ -34,7 +39,15 @@ export async function saveOutputProfileForTenant(
   };
 
   if (valid.id) {
-    const existing = await db.outputProfile.findFirst({ where: { id: valid.id, tenantId: actor.tenantId }, select: { id: true } });
+    const existing = await db.outputProfile.findFirst({
+      where: {
+        id: valid.id,
+        tenantId: actor.tenantId,
+        sourceWorkbookImportId: valid.sourceWorkbookImportId,
+        sourceWorksheetId: valid.sourceWorksheetId
+      },
+      select: { id: true }
+    });
     if (!existing) throw new OutputProfileNotFoundError("The Output Profile is not available.");
     return db.outputProfile.update({
       where: { id: existing.id },
@@ -63,6 +76,9 @@ export async function listOutputProfileWorkspace(db: PrismaClient, tenantId: str
       select: {
         id: true,
         name: true,
+        outputFormat: true,
+        sourceWorkbookImportId: true,
+        sourceWorksheetId: true,
         updatedAt: true,
         _count: { select: { columns: true } },
         sourceWorkbookImport: { select: { originalFileName: true } },
@@ -95,6 +111,11 @@ export async function loadOutputProfileBuilder(
       select: {
         id: true,
         name: true,
+        filenameTemplate: true,
+        outputFormat: true,
+        csvDelimiter: true,
+        csvIncludeHeader: true,
+        xlsxWorksheetName: true,
         filterMatchMode: true,
         sourceWorkbookImportId: true,
         sourceWorksheetId: true,
@@ -135,6 +156,11 @@ export async function loadOutputProfileBuilder(
       draft: {
         id: profile.id,
         name: profile.name,
+        filenameTemplate: profile.filenameTemplate,
+        outputFormat: profile.outputFormat,
+        csvDelimiter: profile.csvDelimiter,
+        csvIncludeHeader: profile.csvIncludeHeader,
+        xlsxWorksheetName: profile.xlsxWorksheetName ?? "",
         sourceWorkbookImportId: profile.sourceWorkbookImportId,
         sourceWorksheetId: profile.sourceWorksheetId,
         filterMatchMode: profile.filterMatchMode,
@@ -189,6 +215,11 @@ export async function loadOutputProfileBuilder(
     draft: {
       id: null,
       name: "",
+      filenameTemplate: "{profile}_{date}",
+      outputFormat: "CSV",
+      csvDelimiter: "COMMA",
+      csvIncludeHeader: true,
+      xlsxWorksheetName: "",
       sourceWorkbookImportId: worksheet.sourceWorkbookImportId,
       sourceWorksheetId: worksheet.id,
       columns: [],
@@ -196,4 +227,77 @@ export async function loadOutputProfileBuilder(
       filters: []
     }
   };
+}
+
+function duplicatedProfileName(name: string) {
+  const suffix = " - Copy";
+  return `${name.slice(0, 120 - suffix.length).trimEnd()}${suffix}`;
+}
+
+export async function duplicateOutputProfileForTenant(
+  db: PrismaClient,
+  actor: { id: string; tenantId: string },
+  profileId: string
+) {
+  const profile = await db.outputProfile.findFirst({
+    where: { id: profileId, tenantId: actor.tenantId },
+    select: {
+      name: true,
+      filenameTemplate: true,
+      outputFormat: true,
+      csvDelimiter: true,
+      csvIncludeHeader: true,
+      xlsxWorksheetName: true,
+      filterMatchMode: true,
+      sourceWorkbookImportId: true,
+      sourceWorksheetId: true,
+      columns: {
+        orderBy: { position: "asc" },
+        select: {
+          columnType: true,
+          sourceColumnIndex: true,
+          sourceHeading: true,
+          outputHeading: true,
+          staticValue: true,
+          adjustmentType: true,
+          adjustmentValue: true,
+          roundingDecimalPlaces: true
+        }
+      },
+      filters: {
+        orderBy: { position: "asc" },
+        select: { sourceColumnIndex: true, sourceHeading: true, operator: true, comparisonValue: true }
+      }
+    }
+  });
+  if (!profile) throw new OutputProfileNotFoundError("The Output Profile is not available.");
+
+  return saveOutputProfileForTenant(db, actor, {
+    name: duplicatedProfileName(profile.name),
+    filenameTemplate: profile.filenameTemplate,
+    outputFormat: profile.outputFormat,
+    csvDelimiter: profile.csvDelimiter,
+    csvIncludeHeader: profile.csvIncludeHeader,
+    xlsxWorksheetName: profile.xlsxWorksheetName ?? "",
+    sourceWorkbookImportId: profile.sourceWorkbookImportId,
+    sourceWorksheetId: profile.sourceWorksheetId,
+    columns: profile.columns.map((column) => ({
+      ...column,
+      staticValue: column.staticValue ?? "",
+      adjustmentValue: column.adjustmentValue?.toString() ?? "",
+      roundingDecimalPlaces: column.roundingDecimalPlaces as 0 | 1 | 2 | 3 | 4 | null
+    })),
+    filterMatchMode: profile.filterMatchMode,
+    filters: profile.filters.map((filter) => ({ ...filter, comparisonValue: filter.comparisonValue ?? "" }))
+  });
+}
+
+export async function deleteOutputProfileForTenant(db: PrismaClient, tenantId: string, profileId: string) {
+  const profile = await db.outputProfile.findFirst({
+    where: { id: profileId, tenantId },
+    select: { id: true, name: true, sourceWorkbookImportId: true, sourceWorksheetId: true }
+  });
+  if (!profile) throw new OutputProfileNotFoundError("The Output Profile is not available.");
+  await db.outputProfile.delete({ where: { id: profile.id } });
+  return profile;
 }

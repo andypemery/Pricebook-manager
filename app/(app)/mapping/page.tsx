@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth";
 import { listOutputProfileWorkspace, loadOutputProfileBuilder } from "@/lib/data-mapper/output-profiles/repository";
 import { hasPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
+import { defaultEffectiveDate } from "@/lib/data-mapper/output-profiles/filename";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,17 @@ export default async function MappingPage({ searchParams }: { searchParams: Mapp
   ]);
   const canEdit = hasPermission(actor, "editRecords");
   const selectionRequested = Boolean(params.profile || params.source || params.worksheet);
+  const initialEffectiveDate = defaultEffectiveDate();
+  const profilesForSelectedSource = builderData ? workspace.profiles
+    .filter((profile) => profile.sourceWorkbookImportId === builderData.source.sourceWorkbookImportId)
+    .map((profile) => ({
+      id: profile.id,
+      name: profile.name,
+      sourceWorkbookImportId: profile.sourceWorkbookImportId,
+      sourceWorksheetId: profile.sourceWorksheetId,
+      outputFormat: profile.outputFormat,
+      outputColumnCount: profile._count.columns
+    })) : [];
 
   return (
     <>
@@ -38,7 +50,14 @@ export default async function MappingPage({ searchParams }: { searchParams: Mapp
       {selectionRequested && !builderData ? <div className="warningBox">That source worksheet or Output Profile is not available to your account.</div> : null}
 
       {builderData ? (
-        <OutputProfileBuilder key={builderData.draft.id ?? builderData.source.id} source={builderData.source} initialDraft={builderData.draft} canEdit={canEdit} />
+        <OutputProfileBuilder
+          key={builderData.draft.id ?? builderData.source.id}
+          source={builderData.source}
+          initialDraft={builderData.draft}
+          profiles={profilesForSelectedSource}
+          initialEffectiveDate={initialEffectiveDate}
+          canEdit={canEdit}
+        />
       ) : (
         <section className="card outputProfileWelcome">
           <h2>Choose a source sheet</h2>
@@ -59,7 +78,7 @@ export default async function MappingPage({ searchParams }: { searchParams: Mapp
                 <Link className="profileCard tile" href={`/mapping?profile=${encodeURIComponent(profile.id)}`} key={profile.id}>
                   <strong>{profile.name}</strong>
                   <span className="muted">{profile.sourceWorkbookImport.originalFileName} · {profile.sourceWorksheet.name}</span>
-                  <span className="muted">{profile._count.columns} output columns · Updated {formatDate(profile.updatedAt)}</span>
+                  <span className="muted">{profile.outputFormat} · {profile._count.columns} output columns · Updated {formatDate(profile.updatedAt)}</span>
                 </Link>
               ))}
             </div>

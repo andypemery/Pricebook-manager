@@ -1,10 +1,12 @@
 "use client";
 
-import { useMemo, useState, useTransition, type DragEvent } from "react";
+import { useMemo, useRef, useState, useTransition, type DragEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Check, GripVertical, Plus, Save } from "lucide-react";
 import { OutputColumnInspector } from "@/components/data-mapper/output-column-inspector";
 import { OutputProfileFilters } from "@/components/data-mapper/output-profile-filters";
+import { OutputProfileManager } from "@/components/data-mapper/output-profile-manager";
+import { OutputProfileSettings } from "@/components/data-mapper/output-profile-settings";
 import { saveOutputProfileAction } from "@/lib/actions/output-profile.actions";
 import {
   addFilter,
@@ -19,7 +21,7 @@ import {
   updateOutputColumn
 } from "@/lib/data-mapper/output-profiles/profile-state";
 import { buildOutputPreview, describeColumnRule } from "@/lib/data-mapper/output-profiles/rules";
-import type { OutputProfileColumnDraft, OutputProfileDraft, SourceWorksheetPreview } from "@/lib/data-mapper/output-profiles/types";
+import type { OutputProfileColumnDraft, OutputProfileDraft, OutputProfileSummary, SourceWorksheetPreview } from "@/lib/data-mapper/output-profiles/types";
 
 const sourceDragType = "application/x-pricebook-source-column";
 const outputDragType = "application/x-pricebook-output-column";
@@ -28,13 +30,17 @@ function newClientId() {
   return crypto.randomUUID();
 }
 
-export function OutputProfileBuilder({ source, initialDraft, canEdit }: {
+export function OutputProfileBuilder({ source, initialDraft, profiles, initialEffectiveDate, canEdit }: {
   source: SourceWorksheetPreview;
   initialDraft: OutputProfileDraft;
+  profiles: OutputProfileSummary[];
+  initialEffectiveDate: string;
   canEdit: boolean;
 }) {
   const router = useRouter();
+  const profileNameInput = useRef<HTMLInputElement>(null);
   const [draft, setDraft] = useState(initialDraft);
+  const [effectiveDate, setEffectiveDate] = useState(initialEffectiveDate);
   const [selectedColumnId, setSelectedColumnId] = useState<string | null>(initialDraft.columns[0]?.clientId ?? null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -113,6 +119,11 @@ export function OutputProfileBuilder({ source, initialDraft, canEdit }: {
       const result = await saveOutputProfileAction({
         id: draft.id,
         name: draft.name,
+        filenameTemplate: draft.filenameTemplate,
+        outputFormat: draft.outputFormat,
+        csvDelimiter: draft.csvDelimiter,
+        csvIncludeHeader: draft.csvIncludeHeader,
+        xlsxWorksheetName: draft.xlsxWorksheetName,
         sourceWorkbookImportId: draft.sourceWorkbookImportId,
         sourceWorksheetId: draft.sourceWorksheetId,
         columns: draft.columns.map((column) => ({
@@ -152,10 +163,20 @@ export function OutputProfileBuilder({ source, initialDraft, canEdit }: {
 
   return (
     <section className="outputProfileBuilder" aria-label="Output Profile Builder">
+      <OutputProfileManager
+        profiles={profiles}
+        activeProfileId={draft.id}
+        sourceWorkbookImportId={draft.sourceWorkbookImportId}
+        sourceWorksheetId={draft.sourceWorksheetId}
+        currentProfileName={draft.name}
+        canEdit={canEdit}
+        onRename={() => { profileNameInput.current?.focus(); profileNameInput.current?.select(); }}
+      />
+
       <div className="card outputProfileIdentity">
         <label className="field">
           <span>Output Profile name</span>
-          <input value={draft.name} onChange={(event) => { setDraft((current) => ({ ...current, name: event.target.value })); setMessage(null); }} placeholder="For example, NHS Contract" maxLength={120} disabled={!canEdit} />
+          <input ref={profileNameInput} value={draft.name} onChange={(event) => { setDraft((current) => ({ ...current, name: event.target.value })); resetSaveState(); }} placeholder="For example, NHS Contract" maxLength={120} disabled={!canEdit} />
         </label>
         <div className="outputProfileSaveArea">
           {message ? <span className="success" role="status">{message}</span> : null}
@@ -262,6 +283,13 @@ export function OutputProfileBuilder({ source, initialDraft, canEdit }: {
           </div>
         ) : null}
 
+        {preview.negativeAdjustedSample ? (
+          <div className="negativeSampleWarning" role="status">
+            <strong>This adjustment produces negative values in the current sample.</strong>
+            <span>This warning is based only on the compact three-row preview.</span>
+          </div>
+        ) : null}
+
         {selectedColumn ? (
           <OutputColumnInspector
             column={selectedColumn}
@@ -285,6 +313,15 @@ export function OutputProfileBuilder({ source, initialDraft, canEdit }: {
         onMove={(clientId, targetIndex) => { setDraft((current) => ({ ...current, filters: moveFilter(current.filters, clientId, targetIndex) })); setMessage(null); }}
         onRemove={(clientId) => { setDraft((current) => ({ ...current, filters: removeFilter(current.filters, clientId) })); resetSaveState(); }}
         onMatchModeChange={(filterMatchMode) => { setDraft((current) => ({ ...current, filterMatchMode })); resetSaveState(); }}
+      />
+
+      <OutputProfileSettings
+        profile={draft}
+        sourceFilename={source.workbookFileName}
+        effectiveDate={effectiveDate}
+        canEdit={canEdit}
+        onChange={(changes) => { setDraft((current) => ({ ...current, ...changes })); resetSaveState(); }}
+        onEffectiveDateChange={setEffectiveDate}
       />
     </section>
   );

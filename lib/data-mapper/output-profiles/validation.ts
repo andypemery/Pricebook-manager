@@ -1,9 +1,13 @@
 import { canonicalDecimalString, filterOperatorNeedsValue, numericFilterOperators, parseDecimal } from "@/lib/data-mapper/output-profiles/rules";
+import { resolveOutputFilename } from "@/lib/data-mapper/output-profiles/filename";
+import { validateWorksheetName } from "@/lib/data-mapper/output-profiles/configuration";
 import {
   adjustmentTypes,
+  csvDelimiters,
   filterMatchModes,
   filterOperators,
   outputColumnTypes,
+  outputFormats,
   type SaveOutputProfileInput
 } from "@/lib/data-mapper/output-profiles/types";
 
@@ -68,10 +72,31 @@ function persistedDecimal(value: string, label: string) {
   return { canonical, decimal };
 }
 
-export function validateOutputProfileInput(input: SaveOutputProfileInput, canonicalHeaders: readonly string[]) {
+export function validateOutputProfileInput(
+  input: SaveOutputProfileInput,
+  canonicalHeaders: readonly string[],
+  canonicalSourceFilename = "source.xlsx"
+) {
   if (!input || typeof input !== "object") throw new OutputProfileValidationError("Output Profile configuration is required.");
   const id = input.id === null || input.id === undefined ? null : requiredText(input.id, "Output Profile", 100);
   const name = requiredText(input.name, "Profile name", maximumProfileNameLength);
+  const outputFormat = oneOf(input.outputFormat, outputFormats, "Output format");
+  const csvDelimiter = oneOf(input.csvDelimiter, csvDelimiters, "CSV delimiter");
+  if (typeof input.csvIncludeHeader !== "boolean") throw new OutputProfileValidationError("CSV header setting must be yes or no.");
+  if (typeof input.xlsxWorksheetName !== "string") throw new OutputProfileValidationError("Worksheet name must be text.");
+  const filename = resolveOutputFilename({
+    filenameTemplate: input.filenameTemplate,
+    profileName: name,
+    sourceFilename: canonicalSourceFilename,
+    effectiveDate: "2000-01-01",
+    outputFormat
+  });
+  if (filename.errors[0]) throw new OutputProfileValidationError(filename.errors[0]);
+  const xlsxWorksheetName = outputFormat === "XLSX" ? input.xlsxWorksheetName.trim() : null;
+  if (outputFormat === "XLSX") {
+    const worksheetIssue = validateWorksheetName(xlsxWorksheetName);
+    if (worksheetIssue) throw new OutputProfileValidationError(worksheetIssue);
+  }
   const sourceWorkbookImportId = requiredText(input.sourceWorkbookImportId, "Source workbook", 100);
   const sourceWorksheetId = requiredText(input.sourceWorksheetId, "Source worksheet", 100);
   const filterMatchMode = oneOf(input.filterMatchMode, filterMatchModes, "Filter match mode");
@@ -154,7 +179,20 @@ export function validateOutputProfileInput(input: SaveOutputProfileInput, canoni
     return { ...source, operator, comparisonValue };
   });
 
-  return { id, name, sourceWorkbookImportId, sourceWorksheetId, columns, filterMatchMode, filters };
+  return {
+    id,
+    name,
+    filenameTemplate: filename.cleanTemplate,
+    outputFormat,
+    csvDelimiter,
+    csvIncludeHeader: input.csvIncludeHeader,
+    xlsxWorksheetName,
+    sourceWorkbookImportId,
+    sourceWorksheetId,
+    columns,
+    filterMatchMode,
+    filters
+  };
 }
 
 export function stringArrayFromJson(value: unknown, label: string) {
