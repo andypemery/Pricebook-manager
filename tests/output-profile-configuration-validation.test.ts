@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { defaultWorksheetName, outputProfileAttentionIssues, validateWorksheetName } from "../lib/data-mapper/output-profiles/configuration";
+import { defaultWorksheetName, effectiveWorksheetName, outputProfileAttentionIssues, validateWorksheetName } from "../lib/data-mapper/output-profiles/configuration";
 import { OutputProfileValidationError, validateOutputProfileInput } from "../lib/data-mapper/output-profiles/validation";
 import type { OutputProfileDraft, SaveOutputProfileInput } from "../lib/data-mapper/output-profiles/types";
 
@@ -67,6 +67,14 @@ describe("Output Profile configuration validation", () => {
     expect(validateWorksheetName("'Bad name")).toContain("apostrophe");
     expect(validateWorksheetName("A".repeat(32))).toContain("31 characters");
     expect(defaultWorksheetName("Framework / Education")).toBe("Framework Education");
+  });
+
+  it("allows an optional XLSX worksheet name and derives a safe effective tab name", () => {
+    expect(validateOutputProfileInput(input({ outputFormat: "XLSX", xlsxWorksheetName: "" }), []))
+      .toMatchObject({ outputFormat: "XLSX", xlsxWorksheetName: null });
+    expect(validateWorksheetName("")).toBeNull();
+    expect(effectiveWorksheetName("Framework / Education", "")).toBe("Framework Education");
+    expect(effectiveWorksheetName("Framework / Education", "Custom tab")).toBe("Custom tab");
   });
 
   it("reports lightweight readiness separately from source-data validity", () => {

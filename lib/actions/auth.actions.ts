@@ -188,3 +188,17 @@ export async function verifyMfaAction(previousStateOrFormData: AuthActionState |
   if (challenge.user.forcePasswordChange) redirect("/change-password");
   redirect("/dashboard");
 }
+
+export async function logoutAction() {
+  const store = await cookies();
+  const token = store.get(authConfig.sessionCookieName)?.value;
+  if (token) {
+    const session = await prisma.session.findUnique({ where: { tokenHash: sha256(token) }, include: { user: true } });
+    if (session) {
+      await prisma.session.delete({ where: { id: session.id } });
+      await audit({ tenantId: session.user.tenantId, userId: session.userId, action: "LOGOUT", entityType: "Session", entityId: session.id });
+    }
+  }
+  store.delete(authConfig.sessionCookieName);
+  redirect("/login");
+}

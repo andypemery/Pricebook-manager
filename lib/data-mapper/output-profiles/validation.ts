@@ -92,11 +92,11 @@ export function validateOutputProfileInput(
     outputFormat
   });
   if (filename.errors[0]) throw new OutputProfileValidationError(filename.errors[0]);
-  const xlsxWorksheetName = outputFormat === "XLSX" ? input.xlsxWorksheetName.trim() : null;
   if (outputFormat === "XLSX") {
-    const worksheetIssue = validateWorksheetName(xlsxWorksheetName);
+    const worksheetIssue = validateWorksheetName(input.xlsxWorksheetName);
     if (worksheetIssue) throw new OutputProfileValidationError(worksheetIssue);
   }
+  const xlsxWorksheetName = outputFormat === "XLSX" ? input.xlsxWorksheetName.trim() || null : null;
   const sourceWorkbookImportId = requiredText(input.sourceWorkbookImportId, "Source workbook", 100);
   const sourceWorksheetId = requiredText(input.sourceWorksheetId, "Source worksheet", 100);
   const filterMatchMode = oneOf(input.filterMatchMode, filterMatchModes, "Filter match mode");

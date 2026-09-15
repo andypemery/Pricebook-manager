@@ -95,6 +95,7 @@ export type ValidationIssue = {
   rowNumber: number;
   sku: string | null;
   field: string;
+  currentValue: string | null;
   message: string;
 };
 

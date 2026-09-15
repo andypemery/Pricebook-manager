@@ -85,13 +85,15 @@ function issue(
     rowNumber: number;
     sku: string | null;
     field: string;
+    currentValue?: string | null;
     message: string;
   },
   index: number
 ): ValidationIssue {
   return {
     id: `${params.worksheetName}-${params.rowNumber}-${params.field}-${index}`,
-    ...params
+    ...params,
+    currentValue: params.currentValue ?? null
   };
 }
 
@@ -130,36 +132,36 @@ function validateWorksheet(
     const nextIndex = () => issues.length + 1;
 
     if (!sku) {
-      issues.push(issue({ ...base, category: "missing-required-field", severity: "Error", field: "SKU", message: "SKU is required." }, nextIndex()));
+      issues.push(issue({ ...base, category: "missing-required-field", severity: "Error", field: "SKU", currentValue: "", message: "SKU is required." }, nextIndex()));
     } else {
       const normalisedSku = sku.toLowerCase();
       const existing = seenSkus.get(normalisedSku);
       if (existing) {
-        issues.push(issue({ ...base, category: "duplicate-sku", severity: "Error", field: "SKU", message: `Duplicate SKU also appears on ${existing.worksheetName} row ${existing.rowNumber}.` }, nextIndex()));
+        issues.push(issue({ ...base, category: "duplicate-sku", severity: "Error", field: "SKU", currentValue: sku, message: `Duplicate SKU also appears on ${existing.worksheetName} row ${existing.rowNumber}.` }, nextIndex()));
       } else {
         seenSkus.set(normalisedSku, { worksheetName: summary.name, rowNumber });
       }
     }
 
-    if (!description) issues.push(issue({ ...base, category: "missing-required-field", severity: "Error", field: "Item description", message: "Item description is required." }, nextIndex()));
-    if (!costPriceText) issues.push(issue({ ...base, category: "missing-required-field", severity: "Error", field: "Cost price", message: "Cost price is required." }, nextIndex()));
-    if (!sellPriceText) issues.push(issue({ ...base, category: "missing-required-field", severity: "Error", field: "Sell price", message: "Sell price is required." }, nextIndex()));
-    if (!framework) issues.push(issue({ ...base, category: "missing-required-field", severity: "Error", field: "Framework", message: "Framework is required." }, nextIndex()));
-    if (!partner) issues.push(issue({ ...base, category: "missing-required-field", severity: "Error", field: "Partner", message: "Partner is required." }, nextIndex()));
+    if (!description) issues.push(issue({ ...base, category: "missing-required-field", severity: "Error", field: "Item description", currentValue: "", message: "Item description is required." }, nextIndex()));
+    if (!costPriceText) issues.push(issue({ ...base, category: "missing-required-field", severity: "Error", field: "Cost price", currentValue: "", message: "Cost price is required." }, nextIndex()));
+    if (!sellPriceText) issues.push(issue({ ...base, category: "missing-required-field", severity: "Error", field: "Sell price", currentValue: "", message: "Sell price is required." }, nextIndex()));
+    if (!framework) issues.push(issue({ ...base, category: "missing-required-field", severity: "Error", field: "Framework", currentValue: "", message: "Framework is required." }, nextIndex()));
+    if (!partner) issues.push(issue({ ...base, category: "missing-required-field", severity: "Error", field: "Partner", currentValue: "", message: "Partner is required." }, nextIndex()));
 
-    if (costPriceText && costPrice === null) issues.push(issue({ ...base, category: "price", severity: "Error", field: "Cost price", message: "Cost price must be a valid number." }, nextIndex()));
-    if (sellPriceText && sellPrice === null) issues.push(issue({ ...base, category: "price", severity: "Error", field: "Sell price", message: "Sell price must be a valid number." }, nextIndex()));
-    if (costPrice !== null && costPrice < 0) issues.push(issue({ ...base, category: "price", severity: "Error", field: "Cost price", message: "Cost price cannot be negative." }, nextIndex()));
-    if (sellPrice !== null && sellPrice === 0) issues.push(issue({ ...base, category: "price", severity: "Error", field: "Sell price", message: "Sell price cannot be zero." }, nextIndex()));
-    if (sellPrice !== null && sellPrice < 0) issues.push(issue({ ...base, category: "price", severity: "Error", field: "Sell price", message: "Sell price cannot be negative." }, nextIndex()));
+    if (costPriceText && costPrice === null) issues.push(issue({ ...base, category: "price", severity: "Error", field: "Cost price", currentValue: costPriceText, message: "Cost price must be a valid number." }, nextIndex()));
+    if (sellPriceText && sellPrice === null) issues.push(issue({ ...base, category: "price", severity: "Error", field: "Sell price", currentValue: sellPriceText, message: "Sell price must be a valid number." }, nextIndex()));
+    if (costPrice !== null && costPrice < 0) issues.push(issue({ ...base, category: "price", severity: "Error", field: "Cost price", currentValue: costPriceText, message: "Cost price cannot be negative." }, nextIndex()));
+    if (sellPrice !== null && sellPrice === 0) issues.push(issue({ ...base, category: "price", severity: "Error", field: "Sell price", currentValue: sellPriceText, message: "Sell price cannot be zero." }, nextIndex()));
+    if (sellPrice !== null && sellPrice < 0) issues.push(issue({ ...base, category: "price", severity: "Error", field: "Sell price", currentValue: sellPriceText, message: "Sell price cannot be negative." }, nextIndex()));
 
-    if (explicitMarginText && explicitMargin === null) issues.push(issue({ ...base, category: "margin", severity: "Error", field: "Margin percentage", message: "Margin percentage must be a valid number." }, nextIndex()));
+    if (explicitMarginText && explicitMargin === null) issues.push(issue({ ...base, category: "margin", severity: "Error", field: "Margin percentage", currentValue: explicitMarginText, message: "Margin percentage must be a valid number." }, nextIndex()));
     if (margin !== null && margin < config.minimumMarginPercentage) {
-      issues.push(issue({ ...base, category: "margin", severity: "Warning", field: "Margin percentage", message: `Margin is below the ${config.minimumMarginPercentage}% threshold.` }, nextIndex()));
+      issues.push(issue({ ...base, category: "margin", severity: "Warning", field: "Margin percentage", currentValue: explicitMarginText || `${margin.toFixed(2)}%`, message: `Margin is below the ${config.minimumMarginPercentage}% threshold.` }, nextIndex()));
     }
 
     if (approvalStatus && !config.allowedApprovalStatuses.includes(approvalStatus.toLowerCase())) {
-      issues.push(issue({ ...base, category: "approval-status", severity: "Error", field: "Approval status", message: "Approval status is not recognised." }, nextIndex()));
+      issues.push(issue({ ...base, category: "approval-status", severity: "Error", field: "Approval status", currentValue: approvalStatus, message: "Approval status is not recognised." }, nextIndex()));
     }
   }
 

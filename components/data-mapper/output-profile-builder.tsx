@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition, type DragEvent } from "react";
+import { Fragment, useMemo, useRef, useState, useTransition, type DragEvent } from "react";
 import { useRouter } from "next/navigation";
-import { Check, GripVertical, Plus, Save } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, GripVertical, Plus, Save, X } from "lucide-react";
 import { OutputColumnInspector } from "@/components/data-mapper/output-column-inspector";
 import { OutputProfileFilters } from "@/components/data-mapper/output-profile-filters";
 import { OutputProfileManager } from "@/components/data-mapper/output-profile-manager";
@@ -21,6 +21,7 @@ import {
   mappedSourceColumnIndexes,
   moveFilter,
   moveOutputColumn,
+  outputColumnTargetIndex,
   removeFilter,
   removeOutputColumn,
   updateFilter,
@@ -47,8 +48,9 @@ export function OutputProfileBuilder({ source, initialDraft, profiles, initialEf
   const profileNameInput = useRef<HTMLInputElement>(null);
   const [draft, setDraft] = useState(initialDraft);
   const [savedFingerprint, setSavedFingerprint] = useState(() => outputProfileDraftFingerprint(initialDraft));
-  const [effectiveDate, setEffectiveDate] = useState(initialEffectiveDate);
-  const [isDragging, setIsDragging] = useState(false);
+  const [filenameDate, setFilenameDate] = useState(initialEffectiveDate);
+  const [dragState, setDragState] = useState<{ kind: "source" } | { kind: "output"; clientId: string } | null>(null);
+  const [insertionIndex, setInsertionIndex] = useState<number | null>(null);
   const [selectedColumnId, setSelectedColumnId] = useState<string | null>(initialDraft.columns[0]?.clientId ?? null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -63,6 +65,7 @@ export function OutputProfileBuilder({ source, initialDraft, profiles, initialEf
   useUnsavedProfileProtection(isDirty);
   const selectedColumnIndex = draft.columns.findIndex((column) => column.clientId === selectedColumnId);
   const selectedColumn = selectedColumnIndex >= 0 ? draft.columns[selectedColumnIndex] : null;
+  const isDragging = dragState !== null;
 
   function resetSaveState() {
     setMessage(null);
@@ -75,8 +78,7 @@ export function OutputProfileBuilder({ source, initialDraft, profiles, initialEf
     if (sourceHeading === undefined) return;
     const clientId = newClientId();
     setDraft((current) => {
-      const appended = addSourceColumn(current.columns, { sourceColumnIndex, sourceHeading }, clientId);
-      return { ...current, columns: targetIndex === current.columns.length ? appended : moveOutputColumn(appended, clientId, targetIndex) };
+      return { ...current, columns: addSourceColumn(current.columns, { sourceColumnIndex, sourceHeading }, clientId, targetIndex) };
     });
     setSelectedColumnId(clientId);
     resetSaveState();
@@ -98,8 +100,10 @@ export function OutputProfileBuilder({ source, initialDraft, profiles, initialEf
 
   function removeColumn(clientId: string) {
     if (!canInteract) return;
+    const removedIndex = draft.columns.findIndex((column) => column.clientId === clientId);
+    const remaining = removeOutputColumn(draft.columns, clientId);
     setDraft((current) => ({ ...current, columns: removeOutputColumn(current.columns, clientId) }));
-    setSelectedColumnId(null);
+    if (selectedColumnId === clientId) setSelectedColumnId(remaining[Math.min(removedIndex, remaining.length - 1)]?.clientId ?? null);
     resetSaveState();
   }
 
@@ -111,7 +115,29 @@ export function OutputProfileBuilder({ source, initialDraft, profiles, initialEf
       return;
     }
     const clientId = event.dataTransfer.getData(outputDragType);
-    if (clientId) moveColumn(clientId, Math.min(targetIndex, Math.max(0, draft.columns.length - 1)));
+    if (clientId) {
+      const target = outputColumnTargetIndex(draft.columns, clientId, targetIndex);
+      if (target >= 0) moveColumn(clientId, target);
+    }
+  }
+
+  function finishDrag() {
+    setDragState(null);
+    setInsertionIndex(null);
+  }
+
+  function updateInsertionFromColumn(event: DragEvent<HTMLElement>, columnIndex: number) {
+    if (!canInteract) return;
+    event.preventDefault();
+    const bounds = event.currentTarget.getBoundingClientRect();
+    setInsertionIndex(event.clientX < bounds.left + bounds.width / 2 ? columnIndex : columnIndex + 1);
+  }
+
+  function dropAtInsertion(event: DragEvent<HTMLElement>, targetIndex: number) {
+    event.preventDefault();
+    event.stopPropagation();
+    dropIntoOutput(event, targetIndex);
+    finishDrag();
   }
 
   function addProfileFilter() {
@@ -195,10 +221,10 @@ export function OutputProfileBuilder({ source, initialDraft, profiles, initialEf
                 {source.headers.map((heading, sourceColumnIndex) => {
                   const used = usedSourceIndexes.has(sourceColumnIndex);
                   return (
-                    <th className={used ? "sourceHeadingCell used" : "sourceHeadingCell"} draggable={canInteract} key={`${heading}-${sourceColumnIndex}`} onDragEnd={() => setIsDragging(false)} onDragStart={(event) => {
+                    <th className={used ? "sourceHeadingCell used" : "sourceHeadingCell"} draggable={canInteract} key={`${heading}-${sourceColumnIndex}`} onDragEnd={finishDrag} onDragStart={(event) => {
                       event.dataTransfer.setData(sourceDragType, String(sourceColumnIndex));
                       event.dataTransfer.effectAllowed = "copy";
-                      setIsDragging(true);
+                      setDragState({ kind: "source" });
                     }}>
                       <div className="sourceHeadingContent">
                         <span>{heading}</span>
@@ -231,7 +257,7 @@ export function OutputProfileBuilder({ source, initialDraft, profiles, initialEf
             {canInteract ? <button className="secondary" type="button" onClick={addFixedColumn}><Plus aria-hidden="true" size={16} /> Add fixed column</button> : null}
           </div>
         </div>
-        <div className={`${draft.columns.length === 0 ? "outputSheetScroll emptyOutputDropzone" : "outputSheetScroll"}${isDragging ? " dragTargetActive" : ""}`} onDragOver={(event) => { if (canInteract) event.preventDefault(); }} onDrop={(event) => { setIsDragging(false); dropIntoOutput(event, draft.columns.length); }}>
+        <div className={`${draft.columns.length === 0 ? "outputSheetScroll emptyOutputDropzone" : "outputSheetScroll"}${isDragging ? " dragTargetActive" : ""}`} onDragOver={(event) => { if (canInteract) event.preventDefault(); }} onDrop={(event) => dropAtInsertion(event, insertionIndex ?? draft.columns.length)}>
           {draft.columns.length > 0 ? (
             <table className="builderSheet outputBuilderSheet">
               <thead>
@@ -240,27 +266,58 @@ export function OutputProfileBuilder({ source, initialDraft, profiles, initialEf
                     const customised = column.columnType === "SOURCE" && column.outputHeading !== column.sourceHeading;
                     const ruleDescription = describeColumnRule(column);
                     return (
-                      <th className={`${selectedColumnId === column.clientId ? "outputHeadingCell selected" : "outputHeadingCell"}${customised || column.columnType === "STATIC" ? " customised" : ""}`} draggable={canInteract} key={column.clientId} onDragEnd={() => setIsDragging(false)} onDragOver={(event) => { if (canInteract) event.preventDefault(); }} onDrop={(event) => { event.stopPropagation(); setIsDragging(false); dropIntoOutput(event, index); }} onDragStart={(event) => {
-                        event.dataTransfer.setData(outputDragType, column.clientId);
-                        event.dataTransfer.effectAllowed = "move";
-                        setIsDragging(true);
-                      }}>
-                        <button className="outputHeadingButton" type="button" onClick={() => setSelectedColumnId(column.clientId)}>
-                          <GripVertical aria-hidden="true" size={15} />
-                          <span>
-                            <strong>{column.outputHeading || "Untitled column"}</strong>
-                            <small>{column.columnType === "STATIC" ? "Fixed value" : `from ${column.sourceHeading}`}</small>
-                            {ruleDescription ? <small className="columnRuleSummary">{ruleDescription}</small> : null}
-                          </span>
-                          {column.columnType === "STATIC" ? <span className="customisedMarker">Fixed</span> : customised ? <span className="customisedMarker">Customised</span> : null}
-                        </button>
-                      </th>
+                      <Fragment key={column.clientId}>
+                        <th
+                          aria-hidden="true"
+                          className={insertionIndex === index ? "outputInsertionSlot active" : "outputInsertionSlot"}
+                          onDragOver={(event) => { if (canInteract) { event.preventDefault(); setInsertionIndex(index); } }}
+                          onDrop={(event) => dropAtInsertion(event, index)}
+                        />
+                        <th className={`${selectedColumnId === column.clientId ? "outputHeadingCell selected" : "outputHeadingCell"}${customised || column.columnType === "STATIC" ? " customised" : ""}`} draggable={canInteract} onDragEnd={finishDrag} onDragOver={(event) => updateInsertionFromColumn(event, index)} onDrop={(event) => dropAtInsertion(event, insertionIndex ?? index)} onDragStart={(event) => {
+                          event.dataTransfer.setData(outputDragType, column.clientId);
+                          event.dataTransfer.effectAllowed = "move";
+                          setDragState({ kind: "output", clientId: column.clientId });
+                        }}>
+                          <button className="outputHeadingButton" type="button" onClick={() => setSelectedColumnId(column.clientId)}>
+                            <GripVertical aria-hidden="true" size={15} />
+                            <span>
+                              <strong>{column.outputHeading || "Untitled column"}</strong>
+                              <small>{column.columnType === "STATIC" ? "Fixed value" : `from ${column.sourceHeading}`}</small>
+                              {ruleDescription ? <small className="columnRuleSummary">{ruleDescription}</small> : null}
+                            </span>
+                            {column.columnType === "STATIC" ? <span className="customisedMarker">Fixed</span> : customised ? <span className="customisedMarker">Customised</span> : null}
+                          </button>
+                          {canInteract ? (
+                            <div className="outputHeadingControls" aria-label={`Controls for ${column.outputHeading || "untitled column"}`}>
+                              <button className="sheetIconButton staticPosition" type="button" draggable={false} onClick={() => moveColumn(column.clientId, index - 1)} disabled={index === 0} aria-label="Move left" title="Move left"><ChevronLeft aria-hidden="true" size={15} /></button>
+                              <button className="sheetIconButton staticPosition" type="button" draggable={false} onClick={() => moveColumn(column.clientId, index + 1)} disabled={index === draft.columns.length - 1} aria-label="Move right" title="Move right"><ChevronRight aria-hidden="true" size={15} /></button>
+                              <button className="sheetIconButton staticPosition dangerIconButton" type="button" draggable={false} onClick={() => removeColumn(column.clientId)} aria-label="Delete column" title="Delete column"><X aria-hidden="true" size={15} /></button>
+                            </div>
+                          ) : null}
+                        </th>
+                      </Fragment>
                     );
                   })}
+                  <th
+                    aria-hidden="true"
+                    className={insertionIndex === draft.columns.length ? "outputInsertionSlot active" : "outputInsertionSlot"}
+                    onDragOver={(event) => { if (canInteract) { event.preventDefault(); setInsertionIndex(draft.columns.length); } }}
+                    onDrop={(event) => dropAtInsertion(event, draft.columns.length)}
+                  />
                 </tr>
               </thead>
               <tbody>
-                {preview.outputRows.map((row, rowIndex) => <tr key={rowIndex}>{row.map((cell, columnIndex) => <td key={`${draft.columns[columnIndex].clientId}-${rowIndex}`}>{cell}</td>)}</tr>)}
+                {preview.outputRows.map((row, rowIndex) => (
+                  <tr key={rowIndex}>
+                    {row.map((cell, columnIndex) => (
+                      <Fragment key={`${draft.columns[columnIndex].clientId}-${rowIndex}`}>
+                        <td className="outputInsertionBodyCell" aria-hidden="true" />
+                        <td>{cell}</td>
+                      </Fragment>
+                    ))}
+                    <td className="outputInsertionBodyCell" aria-hidden="true" />
+                  </tr>
+                ))}
               </tbody>
             </table>
           ) : (
@@ -285,12 +342,8 @@ export function OutputProfileBuilder({ source, initialDraft, profiles, initialEf
         {selectedColumn ? (
           <OutputColumnInspector
             column={selectedColumn}
-            columnIndex={selectedColumnIndex}
-            columnCount={draft.columns.length}
             canEdit={canInteract}
             onChange={updateSelectedColumn}
-            onMove={(targetIndex) => moveColumn(selectedColumn.clientId, targetIndex)}
-            onRemove={() => removeColumn(selectedColumn.clientId)}
           />
         ) : null}
       </section>
@@ -310,10 +363,10 @@ export function OutputProfileBuilder({ source, initialDraft, profiles, initialEf
       <OutputProfileSettings
         profile={draft}
         sourceFilename={source.workbookFileName}
-        effectiveDate={effectiveDate}
+        filenameDate={filenameDate}
         canEdit={canInteract}
         onChange={(changes) => { setDraft((current) => ({ ...current, ...changes })); resetSaveState(); }}
-        onEffectiveDateChange={setEffectiveDate}
+        onFilenameDateChange={setFilenameDate}
       />
     </section>
   );

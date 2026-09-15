@@ -14,6 +14,7 @@ import {
   shouldRegisterUnsavedProtection
 } from "../components/data-mapper/use-unsaved-profile-protection";
 import type { OutputProfileDraft } from "../lib/data-mapper/output-profiles/types";
+import { moveOutputColumn, removeOutputColumn } from "../lib/data-mapper/output-profiles/profile-state";
 
 function draft(overrides: Partial<OutputProfileDraft> = {}): OutputProfileDraft {
   return {
@@ -81,6 +82,22 @@ describe("Output Profile unsaved-change protection", () => {
     const edited = { ...initial, filenameTemplate: "NHS_{date}" };
 
     expect(outputProfileHasUnsavedChanges(edited, baseline)).toBe(true);
+  });
+
+  it("marks arrow moves and column deletion dirty while preserving clean saved order", () => {
+    const initial = draft({
+      columns: [
+        ...draft().columns,
+        { ...draft().columns[0], clientId: "column-2", sourceColumnIndex: 1, sourceHeading: "Description", outputHeading: "DESCRIPTION" }
+      ]
+    });
+    const baseline = outputProfileDraftFingerprint(initial);
+    const moved = { ...initial, columns: moveOutputColumn(initial.columns, "column-2", 0) };
+    const removed = { ...initial, columns: removeOutputColumn(initial.columns, "column-1") };
+
+    expect(outputProfileHasUnsavedChanges(moved, baseline)).toBe(true);
+    expect(outputProfileHasUnsavedChanges(removed, baseline)).toBe(true);
+    expect(outputProfileHasUnsavedChanges(initial, baseline)).toBe(false);
   });
 
   it("allows immediate clean switching but requires confirmation for dirty switching", () => {

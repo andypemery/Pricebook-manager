@@ -8,22 +8,22 @@ import type {
 export function addSourceColumn(
   columns: readonly OutputProfileColumnDraft[],
   source: { sourceColumnIndex: number; sourceHeading: string },
-  clientId: string
+  clientId: string,
+  insertionIndex = columns.length
 ) {
-  return [
-    ...columns,
-    {
-      clientId,
-      columnType: "SOURCE" as const,
-      sourceColumnIndex: source.sourceColumnIndex,
-      sourceHeading: source.sourceHeading,
-      outputHeading: source.sourceHeading,
-      staticValue: "",
-      adjustmentType: "NONE" as const,
-      adjustmentValue: "",
-      roundingDecimalPlaces: null
-    }
-  ];
+  const target = Math.max(0, Math.min(insertionIndex, columns.length));
+  const column = {
+    clientId,
+    columnType: "SOURCE" as const,
+    sourceColumnIndex: source.sourceColumnIndex,
+    sourceHeading: source.sourceHeading,
+    outputHeading: source.sourceHeading,
+    staticValue: "",
+    adjustmentType: "NONE" as const,
+    adjustmentValue: "",
+    roundingDecimalPlaces: null
+  };
+  return [...columns.slice(0, target), column, ...columns.slice(target)];
 }
 
 export function addStaticColumn(columns: readonly OutputProfileColumnDraft[], clientId: string) {
@@ -66,6 +66,18 @@ export function moveOutputColumn(columns: readonly OutputProfileColumnDraft[], c
   const [column] = next.splice(currentIndex, 1);
   next.splice(targetIndex, 0, column);
   return next;
+}
+
+export function outputColumnTargetIndex(
+  columns: readonly OutputProfileColumnDraft[],
+  clientId: string,
+  insertionIndex: number
+) {
+  const currentIndex = columns.findIndex((column) => column.clientId === clientId);
+  if (currentIndex < 0 || columns.length === 0) return -1;
+  const clampedInsertion = Math.max(0, Math.min(insertionIndex, columns.length));
+  const targetIndex = currentIndex < clampedInsertion ? clampedInsertion - 1 : clampedInsertion;
+  return Math.max(0, Math.min(targetIndex, columns.length - 1));
 }
 
 export function mappedSourceColumnIndexes(columns: readonly OutputProfileColumnDraft[]) {

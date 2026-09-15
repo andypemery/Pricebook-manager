@@ -2,7 +2,7 @@
 
 import { useMemo, useRef } from "react";
 import { FileOutput, Info } from "lucide-react";
-import { defaultWorksheetName, outputProfileAttentionIssues } from "@/lib/data-mapper/output-profiles/configuration";
+import { effectiveWorksheetName, outputProfileAttentionIssues } from "@/lib/data-mapper/output-profiles/configuration";
 import { filenameTokenLabels, filenameTokens, resolveOutputFilename, type FilenameToken } from "@/lib/data-mapper/output-profiles/filename";
 import type { OutputProfileDraft } from "@/lib/data-mapper/output-profiles/types";
 
@@ -21,29 +21,29 @@ type SettingChanges = Partial<Pick<
 export function OutputProfileSettings({
   profile,
   sourceFilename,
-  effectiveDate,
+  filenameDate,
   canEdit,
   onChange,
-  onEffectiveDateChange
+  onFilenameDateChange
 }: {
   profile: OutputProfileDraft;
   sourceFilename: string;
-  effectiveDate: string;
+  filenameDate: string;
   canEdit: boolean;
   onChange: (changes: SettingChanges) => void;
-  onEffectiveDateChange: (value: string) => void;
+  onFilenameDateChange: (value: string) => void;
 }) {
   const filenameInput = useRef<HTMLInputElement>(null);
   const resolved = useMemo(() => resolveOutputFilename({
     filenameTemplate: profile.filenameTemplate,
     profileName: profile.name,
     sourceFilename,
-    effectiveDate,
+    effectiveDate: filenameDate,
     outputFormat: profile.outputFormat
-  }), [effectiveDate, profile.filenameTemplate, profile.name, profile.outputFormat, sourceFilename]);
+  }), [filenameDate, profile.filenameTemplate, profile.name, profile.outputFormat, sourceFilename]);
   const attentionIssues = useMemo(
-    () => outputProfileAttentionIssues(profile, sourceFilename, effectiveDate),
-    [effectiveDate, profile, sourceFilename]
+    () => outputProfileAttentionIssues(profile, sourceFilename, filenameDate),
+    [filenameDate, profile, sourceFilename]
   );
 
   function insertToken(token: FilenameToken) {
@@ -71,37 +71,25 @@ export function OutputProfileSettings({
           {attentionIssues.length === 0 ? "Ready" : "Needs attention"}
         </span>
       </div>
-      <p className="profileReadinessNote">Profile readiness checks this reusable configuration only. Source workbook validation is reported separately.</p>
-
       <div className="outputSettingsGrid">
         <label className="field filenameTemplateField">
-          <span>Output filename template</span>
+          <span>Output filename</span>
           <input ref={filenameInput} value={profile.filenameTemplate} onChange={(event) => onChange({ filenameTemplate: event.target.value })} maxLength={200} disabled={!canEdit} />
-          <small>The tokenised template is saved without an extension. The selected format adds it automatically.</small>
         </label>
         <label className="field tokenInsertField">
           <span>Insert token</span>
           <select value="" onChange={(event) => { if (event.target.value) insertToken(event.target.value as FilenameToken); }} disabled={!canEdit}>
-            <option value="">Choose a token…</option>
+            <option value="">Choose a token</option>
             {filenameTokens.map((token) => <option value={token} key={token}>{filenameTokenLabels[token]} · {`{${token}}`}</option>)}
           </select>
         </label>
         <label className="field">
-          <span>Effective preview date</span>
-          <input type="date" value={effectiveDate} onChange={(event) => onEffectiveDateChange(event.target.value)} />
-          <small>Preview-only run context; changing this date never replaces or saves the template tokens.</small>
+          <span title="Used for date tokens in the output filename.">Filename date</span>
+          <input type="date" value={filenameDate} onChange={(event) => onFilenameDateChange(event.target.value)} />
         </label>
         <label className="field">
           <span>Output format</span>
-          <select value={profile.outputFormat} onChange={(event) => {
-            const outputFormat = event.target.value as OutputProfileDraft["outputFormat"];
-            onChange({
-              outputFormat,
-              ...(outputFormat === "XLSX" && !profile.xlsxWorksheetName.trim()
-                ? { xlsxWorksheetName: defaultWorksheetName(profile.name) }
-                : {})
-            });
-          }} disabled={!canEdit}>
+          <select value={profile.outputFormat} onChange={(event) => onChange({ outputFormat: event.target.value as OutputProfileDraft["outputFormat"] })} disabled={!canEdit}>
             <option value="CSV">CSV</option>
             <option value="XLSX">XLSX</option>
           </select>
@@ -124,7 +112,11 @@ export function OutputProfileSettings({
         </div>
       ) : (
         <div className="formatSettings" aria-label="XLSX settings">
-          <label className="field"><span>Worksheet name</span><input value={profile.xlsxWorksheetName} onChange={(event) => onChange({ xlsxWorksheetName: event.target.value })} maxLength={31} disabled={!canEdit} /></label>
+          <label className="field worksheetNameField">
+            <span>Worksheet name (optional)</span>
+            <input value={profile.xlsxWorksheetName} onChange={(event) => onChange({ xlsxWorksheetName: event.target.value })} maxLength={31} disabled={!canEdit} placeholder={effectiveWorksheetName(profile.name, "")} />
+            <small>The tab name inside the Excel workbook. If blank, it will use “{effectiveWorksheetName(profile.name, "")}”.</small>
+          </label>
         </div>
       )}
 

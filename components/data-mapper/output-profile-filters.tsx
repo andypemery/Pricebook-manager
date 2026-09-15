@@ -23,7 +23,6 @@ export function OutputProfileFilters({ headers, filters, matchMode, canEdit, onA
           <h2 id="output-profile-filters-title">Include rows where {matchMode === "ALL" ? "all of the following are true" : "any of the following is true"}</h2>
           <p className="muted">Filters may use any source heading, even if that field is not part of the output.</p>
         </div>
-        {canEdit ? <button className="secondary" type="button" onClick={onAdd}><Plus aria-hidden="true" size={16} /> Add filter</button> : null}
       </div>
 
       <label className="filterMatchMode field">
@@ -79,6 +78,11 @@ export function OutputProfileFilters({ headers, filters, matchMode, canEdit, onA
           <div><strong>All source rows are included</strong><p className="muted">Add a filter when this profile should include only selected products.</p></div>
         </div>
       )}
+      {canEdit ? (
+        <button className="sheetIconButton staticPosition filterAddButton" type="button" onClick={onAdd} aria-label="Add row filter" title="Add row filter">
+          <Plus aria-hidden="true" size={16} />
+        </button>
+      ) : null}
     </section>
   );
 }

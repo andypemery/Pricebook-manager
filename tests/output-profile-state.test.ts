@@ -4,6 +4,7 @@ import {
   addStaticColumn,
   mappedSourceColumnIndexes,
   moveOutputColumn,
+  outputColumnTargetIndex,
   outputPreviewRows,
   removeOutputColumn,
   renameOutputColumn
@@ -43,6 +44,35 @@ describe("Output Profile builder state", () => {
 
     expect(reordered.map((column) => column.sourceHeading)).toEqual(["Description", "Product Code"]);
     expect(removed.map((column) => column.clientId)).toEqual(["column-2"]);
+  });
+
+  it("inserts source headings at the beginning, between columns and at the end", () => {
+    const initial = addSourceColumn([], { sourceColumnIndex: 0, sourceHeading: "SKU" }, "sku");
+    const end = addSourceColumn(initial, { sourceColumnIndex: 2, sourceHeading: "Price" }, "price", initial.length);
+    const middle = addSourceColumn(end, { sourceColumnIndex: 1, sourceHeading: "Description" }, "description", 1);
+    const beginning = addSourceColumn(middle, { sourceColumnIndex: 3, sourceHeading: "Supplier" }, "supplier", 0);
+
+    expect(end.map((column) => column.clientId)).toEqual(["sku", "price"]);
+    expect(middle.map((column) => column.clientId)).toEqual(["sku", "description", "price"]);
+    expect(beginning.map((column) => column.clientId)).toEqual(["supplier", "sku", "description", "price"]);
+  });
+
+  it("converts a moving insertion marker into the correct existing-column target", () => {
+    let columns = addSourceColumn([], { sourceColumnIndex: 0, sourceHeading: "sku" }, "sku");
+    columns = addSourceColumn(columns, { sourceColumnIndex: 1, sourceHeading: "description" }, "description");
+    columns = addSourceColumn(columns, { sourceColumnIndex: 2, sourceHeading: "price" }, "price");
+    columns = addSourceColumn(columns, { sourceColumnIndex: 3, sourceHeading: "currency" }, "currency");
+
+    expect(outputColumnTargetIndex(columns, "price", 0)).toBe(0);
+    expect(outputColumnTargetIndex(columns, "sku", 3)).toBe(2);
+    expect(outputColumnTargetIndex(columns, "description", 4)).toBe(3);
+    expect(outputColumnTargetIndex(columns, "currency", 4)).toBe(3);
+  });
+
+  it("makes a deleted source field available for reuse", () => {
+    const columns = addSourceColumn([], { sourceColumnIndex: 0, sourceHeading: "SKU" }, "sku");
+    expect(mappedSourceColumnIndexes(columns)).toEqual(new Set([0]));
+    expect(mappedSourceColumnIndexes(removeOutputColumn(columns, "sku"))).toEqual(new Set());
   });
 
   it("projects no more than three source sample rows through the current output order", () => {

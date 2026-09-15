@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import type ExcelJS from "exceljs";
 import { useRouter } from "next/navigation";
-import { ArrowDownUp, Columns3, FileSpreadsheet, LoaderCircle, Search, Upload } from "lucide-react";
+import { ArrowDownUp, FileSpreadsheet, LoaderCircle, Search, Upload } from "lucide-react";
 import type { UploadedWorkbookDetails, ValidationIssueCategory, ValidationSeverity, WorkbookSummary, WorkbookValidationResult, WorksheetPreview } from "@/lib/data-mapper/types";
 import { createWorksheetPreview, friendlyExcelImportMessage, readWorkbook } from "@/lib/data-mapper/excel-import";
 import { validateWorkbook } from "@/lib/data-mapper/validation";
@@ -15,6 +15,7 @@ import {
   worksheetPreviewPanelId,
   worksheetTabId
 } from "@/components/data-mapper/workbook-explorer-ui";
+import { ValidationNextSteps } from "@/components/data-mapper/validation-next-steps";
 
 type SortDirection = "asc" | "desc";
 
@@ -189,15 +190,7 @@ export function WorkbookImporter({ canPrepareOutputProfiles }: { canPrepareOutpu
             <h1>Excel import engine</h1>
             <p>Import Excel workbooks, inspect worksheet structure and preview the first 100 data rows before mapping or validation.</p>
           </div>
-          <div className="actions">
-            {summary ? <span className="badge success">Workbook loaded</span> : <span className="badge">Ready for upload</span>}
-            {summary && selectedFile && canPrepareOutputProfiles ? (
-              <button className="primary" type="button" onClick={prepareOutputProfile} disabled={isPreparingProfile}>
-                {isPreparingProfile ? <LoaderCircle aria-hidden="true" size={18} className="spinIcon" /> : <Columns3 aria-hidden="true" size={18} />}
-                {isPreparingProfile ? "Preparing profile" : "Use in Output Profile"}
-              </button>
-            ) : null}
-          </div>
+          <div className="actions">{summary ? <span className="badge success">Workbook loaded</span> : <span className="badge">Ready for upload</span>}</div>
         </div>
       </section>
 
@@ -279,6 +272,12 @@ export function WorkbookImporter({ canPrepareOutputProfiles }: { canPrepareOutpu
                 <div><strong>{validation.summary.priceIssueCount.toLocaleString("en-GB")}</strong><span>Price issues</span></div>
                 <div><strong>{validation.summary.marginIssueCount.toLocaleString("en-GB")}</strong><span>Margin issues</span></div>
               </div>
+              {validation.summary.totalErrors > 0 ? (
+                <p className="validationErrorGuidance" role="alert">Errors were found in the source workbook. Correct these values in the source file and upload the corrected workbook.</p>
+              ) : null}
+              {validation.summary.totalWarnings > 0 ? (
+                <p className="validationWarningGuidance">Warnings identify values to review but do not block Output Profile design.</p>
+              ) : null}
             </section>
           ) : null}
 
@@ -393,7 +392,7 @@ export function WorkbookImporter({ canPrepareOutputProfiles }: { canPrepareOutpu
                 <div className="previewTableWrap validationIssueWrap">
                   <table className="previewTable validationIssueTable">
                     <thead>
-                      <tr><th>Severity</th><th>Worksheet</th><th>Row</th><th>SKU</th><th>Field</th><th>Issue</th></tr>
+                      <tr><th>Severity</th><th>Worksheet</th><th>Row</th><th>Source column</th><th>Current value</th><th>Rule/message</th></tr>
                     </thead>
                     <tbody>
                       {filteredIssues.map((issue) => (
@@ -401,8 +400,8 @@ export function WorkbookImporter({ canPrepareOutputProfiles }: { canPrepareOutpu
                           <td><span className={issue.severity === "Error" ? "badge danger" : "badge warning"}>{issue.severity}</span></td>
                           <td>{issue.worksheetName}</td>
                           <td>{issue.rowNumber}</td>
-                          <td>{issue.sku ?? "Not provided"}</td>
                           <td>{issue.field}</td>
+                          <td>{issue.currentValue || "Blank"}</td>
                           <td>{issue.message}</td>
                         </tr>
                       ))}
@@ -416,6 +415,17 @@ export function WorkbookImporter({ canPrepareOutputProfiles }: { canPrepareOutpu
                 </div>
               )}
             </section>
+          ) : null}
+
+          {validation && selectedFile ? (
+            <ValidationNextSteps
+              errorCount={validation.summary.totalErrors}
+              warningCount={validation.summary.totalWarnings}
+              canContinue={canPrepareOutputProfiles}
+              isPreparing={isPreparingProfile}
+              onUploadCorrected={() => inputRef.current?.click()}
+              onContinue={prepareOutputProfile}
+            />
           ) : null}
         </>
       ) : null}

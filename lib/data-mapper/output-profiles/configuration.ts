@@ -5,7 +5,8 @@ const invalidWorksheetCharacters = /[\\/*?:\[\]]/;
 const invalidWorksheetCharactersGlobal = /[\\/*?:\[\]]/g;
 
 export function validateWorksheetName(value: unknown) {
-  if (typeof value !== "string" || !value.trim()) return "Worksheet name is required for XLSX output.";
+  if (typeof value !== "string") return "Worksheet name must be text.";
+  if (!value.trim()) return null;
   const name = value.trim();
   if (name.length > 31) return "Worksheet name must be 31 characters or fewer.";
   if (invalidWorksheetCharacters.test(name)) return "Worksheet name cannot contain \\, /, *, ?, :, [ or ].";
@@ -16,6 +17,10 @@ export function validateWorksheetName(value: unknown) {
 export function defaultWorksheetName(profileName: string) {
   const normalised = profileName.replace(invalidWorksheetCharactersGlobal, " ").replace(/\s+/g, " ").trim().replace(/^'+|'+$/g, "");
   return (normalised || "Output").slice(0, 31);
+}
+
+export function effectiveWorksheetName(profileName: string, configuredName: string) {
+  return configuredName.trim() || defaultWorksheetName(profileName);
 }
 
 export function outputProfileAttentionIssues(

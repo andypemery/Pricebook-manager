@@ -84,6 +84,18 @@ describe("Output Profile persistence", () => {
     expect(create.mock.calls[0]?.[0].data).not.toHaveProperty("generatedRows");
   });
 
+  it("persists a blank optional XLSX worksheet name as null for derived naming", async () => {
+    const create = vi.fn().mockResolvedValue({ id: "profile-xlsx", name: "Education Contract", updatedAt: new Date() });
+    const db = {
+      sourceWorksheet: { findFirst: vi.fn().mockResolvedValue({ headers: ["Product Code", "Description"], sourceWorkbookImport: { originalFileName: "pricebook.xlsx" } }) },
+      outputProfile: { create }
+    } as unknown as PrismaClient;
+
+    await saveOutputProfileForTenant(db, actor, profileInput({ outputFormat: "XLSX", xlsxWorksheetName: "" }));
+
+    expect(create.mock.calls[0]?.[0].data).toMatchObject({ outputFormat: "XLSX", xlsxWorksheetName: null });
+  });
+
   it("replaces stored columns in the supplied order when reordering or removing mappings", async () => {
     const update = vi.fn().mockResolvedValue({ id: "profile-1", name: "NHS Contract", updatedAt: new Date() });
     const db = {
