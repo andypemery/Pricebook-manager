@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { defaultWorksheetName, effectiveWorksheetName, outputProfileAttentionIssues, validateWorksheetName } from "../lib/data-mapper/output-profiles/configuration";
+import { configuredWorksheetName, defaultWorksheetName, effectiveWorksheetName, normaliseWorksheetIdentity, outputProfileAttentionIssues, validateWorksheetName, validateWorksheetNames } from "../lib/data-mapper/output-profiles/configuration";
 import { OutputProfileValidationError, validateOutputProfileInput } from "../lib/data-mapper/output-profiles/validation";
 import type { OutputProfileDraft, SaveOutputProfileInput } from "../lib/data-mapper/output-profiles/types";
 
@@ -82,5 +82,32 @@ describe("Output Profile configuration validation", () => {
       .toContain("Add at least one output column.");
     expect(outputProfileAttentionIssues(draft({ filenameTemplate: "Bad_{token}" }), "Supplier.xlsx", "2026-09-13"))
       .toContain("Filename token {token} is not supported.");
+  });
+
+  it("enforces output-format compatibility for reusable worksheet handling modes", () => {
+    expect(() => validateOutputProfileInput(input({ worksheetMode: "SEPARATE_WORKSHEETS" }), [], "Supplier.xlsx", ["Products"]))
+      .toThrow("requires XLSX");
+    expect(validateOutputProfileInput(input({ outputFormat: "XLSX", worksheetMode: "SEPARATE_WORKSHEETS" }), [], "Supplier.xlsx", ["Products"]))
+      .toMatchObject({ worksheetMode: "SEPARATE_WORKSHEETS" });
+    expect(() => validateOutputProfileInput(input({ filenameTemplate: "NHS_{worksheet}", worksheetMode: "COMBINE" }), [], "Supplier.xlsx", ["Products"]))
+      .toThrow("only available for separate worksheet files");
+    expect(validateOutputProfileInput(input({ filenameTemplate: "{worksheet}", worksheetMode: "SEPARATE_FILES" }), [], "Supplier.xlsx", ["Products"]))
+      .toMatchObject({ filenameTemplate: "{worksheet}", worksheetMode: "SEPARATE_FILES" });
+  });
+
+  it("persists portable custom worksheet names by normalised source name and rejects IDs or invalid names", () => {
+    const mapping = { [normaliseWorksheetIdentity("HP Print")]: "HP" };
+    expect(validateOutputProfileInput(input({ worksheetMode: "SEPARATE_FILES", worksheetNameMode: "CUSTOM", worksheetNameMappings: mapping }), [], "Supplier.xlsx", ["HP Print"]))
+      .toMatchObject({ worksheetNameMappings: { "hp print": "HP" } });
+    expect(configuredWorksheetName({ worksheetNameMode: "CUSTOM", worksheetNameMappings: mapping }, "HP Print")).toBe("HP");
+    expect(() => validateOutputProfileInput(input({ worksheetMode: "SEPARATE_FILES", worksheetNameMode: "CUSTOM", worksheetNameMappings: { "worksheet-id-1": "HP" } }), [], "Supplier.xlsx", ["HP Print"]))
+      .toThrow("does not refer to a worksheet");
+    expect(() => validateOutputProfileInput(input({ worksheetMode: "SEPARATE_FILES", worksheetNameMode: "CUSTOM", worksheetNameMappings: { "hp print": "Bad/Name" } }), [], "Supplier.xlsx", ["HP Print"]))
+      .toThrow("cannot contain");
+  });
+
+  it("rejects duplicate and overlength generated worksheet names", () => {
+    expect(validateWorksheetNames(["HP", "hp"])[0]).toContain("duplicated");
+    expect(validateWorksheetNames(["A".repeat(32)])[0]).toContain("31 characters");
   });
 });

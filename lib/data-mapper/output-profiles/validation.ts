@@ -1,6 +1,6 @@
 import { canonicalDecimalString, filterOperatorNeedsValue, numericFilterOperators, parseDecimal } from "@/lib/data-mapper/output-profiles/rules";
 import { resolveOutputFilename } from "@/lib/data-mapper/output-profiles/filename";
-import { validateWorksheetName } from "@/lib/data-mapper/output-profiles/configuration";
+import { configuredWorksheetName, normaliseWorksheetIdentity, validateWorksheetName, validateWorksheetNames } from "@/lib/data-mapper/output-profiles/configuration";
 import {
   adjustmentTypes,
   csvDelimiters,
@@ -8,6 +8,8 @@ import {
   filterOperators,
   outputColumnTypes,
   outputFormats,
+  worksheetModes,
+  worksheetNameModes,
   type SaveOutputProfileInput
 } from "@/lib/data-mapper/output-profiles/types";
 
@@ -75,12 +77,21 @@ function persistedDecimal(value: string, label: string) {
 export function validateOutputProfileInput(
   input: SaveOutputProfileInput,
   canonicalHeaders: readonly string[],
-  canonicalSourceFilename = "source.xlsx"
+  canonicalSourceFilename = "source.xlsx",
+  canonicalWorksheetNames: readonly string[] = []
 ) {
   if (!input || typeof input !== "object") throw new OutputProfileValidationError("Output Profile configuration is required.");
   const id = input.id === null || input.id === undefined ? null : requiredText(input.id, "Output Profile", 100);
   const name = requiredText(input.name, "Profile name", maximumProfileNameLength);
   const outputFormat = oneOf(input.outputFormat, outputFormats, "Output format");
+  const worksheetMode = oneOf(input.worksheetMode ?? "COMBINE", worksheetModes, "Worksheet handling");
+  const worksheetNameMode = oneOf(input.worksheetNameMode ?? "SOURCE", worksheetNameModes, "Worksheet name mode");
+  if (worksheetMode === "SEPARATE_WORKSHEETS" && outputFormat !== "XLSX") {
+    throw new OutputProfileValidationError("Keeping source worksheets separate requires XLSX output.");
+  }
+  if (worksheetMode !== "SEPARATE_FILES" && typeof input.filenameTemplate === "string" && input.filenameTemplate.includes("{worksheet}")) {
+    throw new OutputProfileValidationError("The {worksheet} filename token is only available for separate worksheet files.");
+  }
   const csvDelimiter = oneOf(input.csvDelimiter, csvDelimiters, "CSV delimiter");
   if (typeof input.csvIncludeHeader !== "boolean") throw new OutputProfileValidationError("CSV header setting must be yes or no.");
   if (typeof input.xlsxWorksheetName !== "string") throw new OutputProfileValidationError("Worksheet name must be text.");
@@ -89,7 +100,8 @@ export function validateOutputProfileInput(
     profileName: name,
     sourceFilename: canonicalSourceFilename,
     effectiveDate: "2000-01-01",
-    outputFormat
+    outputFormat,
+    worksheetName: worksheetMode === "SEPARATE_FILES" ? "Worksheet" : undefined
   });
   if (filename.errors[0]) throw new OutputProfileValidationError(filename.errors[0]);
   if (outputFormat === "XLSX") {
@@ -100,6 +112,27 @@ export function validateOutputProfileInput(
   const sourceWorkbookImportId = requiredText(input.sourceWorkbookImportId, "Source workbook", 100);
   const sourceWorksheetId = requiredText(input.sourceWorksheetId, "Source worksheet", 100);
   const filterMatchMode = oneOf(input.filterMatchMode, filterMatchModes, "Filter match mode");
+  const suppliedMappings = input.worksheetNameMappings ?? {};
+  if (!suppliedMappings || typeof suppliedMappings !== "object" || Array.isArray(suppliedMappings)) {
+    throw new OutputProfileValidationError("Custom worksheet names must be supplied as a keyed object.");
+  }
+  const knownWorksheetKeys = new Set(canonicalWorksheetNames.map(normaliseWorksheetIdentity));
+  const worksheetNameMappings = Object.fromEntries(Object.entries(suppliedMappings).map(([key, value]) => {
+    const canonicalKey = normaliseWorksheetIdentity(key);
+    if (!canonicalKey || canonicalKey !== key || (knownWorksheetKeys.size > 0 && !knownWorksheetKeys.has(key))) {
+      throw new OutputProfileValidationError("A custom worksheet name does not refer to a worksheet in the current source workbook.");
+    }
+    if (typeof value !== "string" || !value.trim()) throw new OutputProfileValidationError("A custom worksheet name cannot be blank.");
+    const worksheetIssue = validateWorksheetName(value);
+    if (worksheetIssue) throw new OutputProfileValidationError(worksheetIssue);
+    return [key, value.trim()];
+  }));
+  if (Object.keys(worksheetNameMappings).length > 100) throw new OutputProfileValidationError("No more than 100 custom worksheet names may be saved.");
+  if (worksheetNameMode === "CUSTOM" && canonicalWorksheetNames.length > 0) {
+    const names = canonicalWorksheetNames.map((name) => configuredWorksheetName({ worksheetNameMode, worksheetNameMappings }, name));
+    const worksheetIssues = validateWorksheetNames(names);
+    if (worksheetIssues[0]) throw new OutputProfileValidationError(worksheetIssues[0]);
+  }
 
   if (!Array.isArray(input.columns)) throw new OutputProfileValidationError("Output columns must be supplied as a list.");
   if (input.columns.length > maximumOutputColumns) {
@@ -187,6 +220,9 @@ export function validateOutputProfileInput(
     csvDelimiter,
     csvIncludeHeader: input.csvIncludeHeader,
     xlsxWorksheetName,
+    worksheetMode,
+    worksheetNameMode,
+    worksheetNameMappings,
     sourceWorkbookImportId,
     sourceWorksheetId,
     columns,

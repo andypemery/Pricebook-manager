@@ -426,12 +426,13 @@ export function OutputProfileBuilder({ source, initialDraft, profiles, initialAp
       <OutputProfileSettings
         profile={draft}
         sourceFilename={source.workbookFileName}
+        worksheets={source.workbookWorksheets ?? [{ id: source.id, name: source.worksheetName, position: 0, headers: source.headers }]}
         filenameDate={filenameDate}
         canEdit={canInteract}
         onChange={(changes) => { setDraft((current) => ({ ...current, ...changes })); resetSaveState(); }}
         onFilenameDateChange={setFilenameDate}
       />
-      <OutputGenerationPanel sourceWorkbookImportId={source.sourceWorkbookImportId} draft={draft} filenameDate={filenameDate} canEdit={canEdit && !isSaving} />
+      <OutputGenerationPanel sourceWorkbookImportId={source.sourceWorkbookImportId} draft={draft} worksheets={source.workbookWorksheets ?? [{ id: source.id, name: source.worksheetName, position: 0, headers: source.headers }]} filenameDate={filenameDate} canEdit={canEdit && !isSaving} />
     </section>
   );
 }

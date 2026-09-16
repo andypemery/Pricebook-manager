@@ -5,6 +5,7 @@ import { finaliseSourceWorkbookUpload } from "../lib/data-mapper/output-profiles
 import { sourceWorkbookContentTypes } from "../lib/data-mapper/source-workbook-policy";
 import { createInMemorySourceWorkbookStorage } from "../lib/data-mapper/source-workbook-storage";
 import { authoriseSourceWorkbookUpload } from "../lib/data-mapper/source-workbook-upload";
+import { validationIssueFingerprint } from "../lib/data-mapper/validation/validation-engine";
 
 const actor = { id: "user-1", tenantId: "tenant-1" };
 const intentSecret = "test-source-upload-secret-that-is-long-enough";
@@ -33,10 +34,11 @@ function newImportDatabase() {
       worksheets: nested.create.map((worksheet, index) => ({ id: `worksheet-${index}`, ...worksheet }))
     };
   });
-  const transactionClient = { fileReference: { create: createFileReference }, sourceWorkbookImport: { create: createSourceImport } };
+  const createValidationOverrides = vi.fn(async () => ({ count: 1 }));
+  const transactionClient = { fileReference: { create: createFileReference }, sourceWorkbookImport: { create: createSourceImport }, validationIssueOverride: { createMany: createValidationOverrides } };
   const transaction = vi.fn(async (callback: (client: typeof transactionClient) => Promise<unknown>) => callback(transactionClient));
   const db = { sourceWorkbookImport: { findFirst }, $transaction: transaction } as unknown as PrismaClient;
-  return { db, createFileReference, createSourceImport, transaction, findFirst };
+  return { db, createFileReference, createSourceImport, createValidationOverrides, transaction, findFirst };
 }
 
 async function authoriseAndUpload(options: {
@@ -106,6 +108,38 @@ describe("source workbook direct-upload finalisation", () => {
       .rejects.toThrow();
     const issuedPath = "source-workbooks/tenant-1/11111111-1111-4111-8111-111111111111/original.xlsx";
     expect(await storage.head(issuedPath)).toBeNull();
+  });
+
+  it("rejects manufactured validation-ignore fingerprints before source registration", async () => {
+    const { db, createSourceImport } = newImportDatabase();
+    const bytes = await workbookBytes();
+    const { storage, authorisation } = await authoriseAndUpload({ db, bytes });
+    await expect(finaliseSourceWorkbookUpload(db, actor, {
+      uploadIntent: authorisation.uploadIntent,
+      ignoredValidationFingerprints: ["not-from-this-workbook"]
+    }, { storage, secret: intentSecret, now })).rejects.toThrow("do not belong to this uploaded workbook");
+    expect(createSourceImport).not.toHaveBeenCalled();
+  });
+
+  it("persists only a revalidated blocking fingerprint selected in the browser preview", async () => {
+    const { db, createValidationOverrides } = newImportDatabase();
+    const bytes = await workbookBytes();
+    const { storage, authorisation } = await authoriseAndUpload({ db, bytes });
+    const fingerprint = validationIssueFingerprint({
+      worksheetName: "Products",
+      rowNumber: 2,
+      field: "Cost price",
+      category: "missing-required-field",
+      severity: "Error",
+      currentValue: ""
+    });
+    await finaliseSourceWorkbookUpload(db, actor, { uploadIntent: authorisation.uploadIntent, ignoredValidationFingerprints: [fingerprint] }, { storage, secret: intentSecret, now });
+    expect(createValidationOverrides).toHaveBeenCalledWith({ data: [{
+      tenantId: "tenant-1",
+      sourceWorkbookImportId: "11111111-1111-4111-8111-111111111111",
+      issueFingerprint: fingerprint,
+      ignoredById: "user-1"
+    }] });
   });
 
   it("rejects metadata for a different path instead of trusting client completion", async () => {

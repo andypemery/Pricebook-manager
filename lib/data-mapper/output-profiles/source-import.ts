@@ -103,7 +103,7 @@ async function safelyDeleteUploadedObject(storage: SourceWorkbookStorage, storag
 export async function finaliseSourceWorkbookUpload(
   db: PrismaClient,
   actor: { id: string; tenantId: string },
-  input: { uploadIntent: string; worksheetName?: unknown },
+  input: { uploadIntent: string; worksheetName?: unknown; ignoredValidationFingerprints?: unknown },
   options: { storage?: SourceWorkbookStorage; secret?: string; now?: number } = {}
 ) {
   const intent = validateSourceWorkbookUploadIntent({
@@ -168,11 +168,19 @@ export async function finaliseSourceWorkbookUpload(
     uploadedById: actor.id
   };
   const validationStatus = prepared.validation.summary.totalErrors > 0 ? "VALIDATED_WITH_ERRORS" : "VALIDATED";
+  const suppliedIgnoredFingerprints = Array.isArray(input.ignoredValidationFingerprints)
+    ? [...new Set(input.ignoredValidationFingerprints.filter((value): value is string => typeof value === "string" && value.length <= 64))]
+    : [];
+  const blockingFingerprints = new Set(prepared.validation.issues.filter((issue) => issue.severity === "Error").map((issue) => issue.fingerprint));
+  if (suppliedIgnoredFingerprints.some((fingerprint) => !blockingFingerprints.has(fingerprint))) {
+    await safelyDeleteUploadedObject(storage, intent.storageKey);
+    throw new SourceWorkbookImportError("One or more ignored validation issues do not belong to this uploaded workbook.");
+  }
 
   if (!existing) {
     return db.$transaction(async (transaction) => {
       const fileReference = await transaction.fileReference.create({ data: fileReferenceData });
-      return transaction.sourceWorkbookImport.create({
+      const sourceImport = await transaction.sourceWorkbookImport.create({
         data: {
           id: intent.uploadId,
           tenantId: actor.tenantId,
@@ -187,6 +195,17 @@ export async function finaliseSourceWorkbookUpload(
         },
         include: { worksheets: { orderBy: { position: "asc" } } }
       });
+      if (suppliedIgnoredFingerprints.length > 0) {
+        await transaction.validationIssueOverride.createMany({
+          data: suppliedIgnoredFingerprints.map((issueFingerprint) => ({
+            tenantId: actor.tenantId,
+            sourceWorkbookImportId: sourceImport.id,
+            issueFingerprint,
+            ignoredById: actor.id
+          }))
+        });
+      }
+      return sourceImport;
     });
   }
 
@@ -203,6 +222,16 @@ export async function finaliseSourceWorkbookUpload(
       }
     }
     await transaction.validationIssueOverride.deleteMany({ where: { tenantId: actor.tenantId, sourceWorkbookImportId: existing.id } });
+    if (suppliedIgnoredFingerprints.length > 0) {
+      await transaction.validationIssueOverride.createMany({
+        data: suppliedIgnoredFingerprints.map((issueFingerprint) => ({
+          tenantId: actor.tenantId,
+          sourceWorkbookImportId: existing.id,
+          issueFingerprint,
+          ignoredById: actor.id
+        }))
+      });
+    }
     return transaction.sourceWorkbookImport.update({
       where: { id: existing.id },
       data: {

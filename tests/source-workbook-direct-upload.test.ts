@@ -72,4 +72,16 @@ describe("browser-to-private-Blob source uploads", () => {
     expect(route).not.toContain("instanceof File");
     expect(route).toContain("request.json");
   });
+
+  it("carries only selected validation fingerprints into secure finalisation", async () => {
+    const request = successfulRequest();
+    await uploadSourceWorkbookDirectly(declaredSizeFile(1024), {
+      request: request as unknown as typeof fetch,
+      directPut: vi.fn(async () => undefined),
+      ignoredValidationFingerprints: ["fingerprint-1", "fingerprint-2"]
+    });
+    const body = JSON.parse(String(request.mock.calls[1]?.[1]?.body));
+    expect(body).toEqual({ uploadIntent: "signed-intent", ignoredValidationFingerprints: ["fingerprint-1", "fingerprint-2"] });
+    expect(body).not.toHaveProperty("rows");
+  });
 });

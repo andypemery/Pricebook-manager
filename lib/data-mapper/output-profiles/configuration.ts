@@ -1,5 +1,6 @@
 import { resolveOutputFilename } from "@/lib/data-mapper/output-profiles/filename";
 import type { OutputProfileDraft } from "@/lib/data-mapper/output-profiles/types";
+import { normaliseSourceHeading } from "@/lib/data-mapper/output-profiles/compatibility";
 
 const invalidWorksheetCharacters = /[\\/*?:\[\]]/;
 const invalidWorksheetCharactersGlobal = /[\\/*?:\[\]]/g;
@@ -23,6 +24,29 @@ export function effectiveWorksheetName(profileName: string, configuredName: stri
   return configuredName.trim() || defaultWorksheetName(profileName);
 }
 
+export function normaliseWorksheetIdentity(value: string) {
+  return normaliseSourceHeading(value);
+}
+
+export function configuredWorksheetName(profile: Pick<OutputProfileDraft, "worksheetNameMode" | "worksheetNameMappings">, sourceName: string) {
+  if (profile.worksheetNameMode !== "CUSTOM") return sourceName;
+  return profile.worksheetNameMappings?.[normaliseWorksheetIdentity(sourceName)]?.trim() || sourceName;
+}
+
+export function validateWorksheetNames(names: readonly string[]) {
+  const issues = names.flatMap((name) => {
+    const issue = validateWorksheetName(name);
+    return issue ? [`${name || "Worksheet"}: ${issue}`] : [];
+  });
+  const seen = new Set<string>();
+  for (const name of names) {
+    const key = name.trim().toLocaleLowerCase("en-GB");
+    if (seen.has(key)) issues.push(`Worksheet name “${name}” is duplicated.`);
+    seen.add(key);
+  }
+  return [...new Set(issues)];
+}
+
 export function outputProfileAttentionIssues(
   profile: OutputProfileDraft,
   sourceFilename: string,
@@ -43,9 +67,15 @@ export function outputProfileAttentionIssues(
     outputFormat: profile.outputFormat
   });
   issues.push(...filename.errors);
+  if ((profile.worksheetMode ?? "COMBINE") !== "SEPARATE_FILES" && profile.filenameTemplate.includes("{worksheet}")) {
+    issues.push("The {worksheet} filename token is only available for separate worksheet files.");
+  }
   if (profile.outputFormat === "XLSX") {
     const worksheetIssue = validateWorksheetName(profile.xlsxWorksheetName);
     if (worksheetIssue) issues.push(worksheetIssue);
+  }
+  if (profile.worksheetMode === "SEPARATE_WORKSHEETS" && profile.outputFormat !== "XLSX") {
+    issues.push("Keeping source worksheets separate requires XLSX output.");
   }
   return [...new Set(issues)];
 }

@@ -58,6 +58,9 @@ describe("Output Profile persistence", () => {
         outputFormat: "CSV",
         csvDelimiter: "COMMA",
         csvIncludeHeader: true,
+        worksheetMode: "COMBINE",
+        worksheetNameMode: "SOURCE",
+        worksheetNameMappings: {},
         columns: { create: [
           expect.objectContaining({ position: 0, sourceHeading: "Product Code", outputHeading: "MATERIAL" }),
           expect.objectContaining({ position: 1, sourceHeading: "Description", outputHeading: "DESCRIPTION" })
@@ -65,6 +68,7 @@ describe("Output Profile persistence", () => {
       })
     }));
     expect(create.mock.calls[0]?.[0].data).not.toHaveProperty("effectiveDate");
+    expect(create.mock.calls[0]?.[0].data).not.toHaveProperty("selectedWorksheetIds");
   });
 
   it("persists XLSX worksheet configuration without generating workbook data", async () => {

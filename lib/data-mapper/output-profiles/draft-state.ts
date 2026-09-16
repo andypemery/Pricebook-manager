@@ -14,6 +14,9 @@ export function saveInputFromOutputProfileDraft(draft: OutputProfileDraft): Save
     csvDelimiter: draft.csvDelimiter,
     csvIncludeHeader: draft.csvIncludeHeader,
     xlsxWorksheetName: draft.xlsxWorksheetName,
+    worksheetMode: draft.worksheetMode ?? "COMBINE",
+    worksheetNameMode: draft.worksheetNameMode ?? "SOURCE",
+    worksheetNameMappings: draft.worksheetNameMappings ?? {},
     sourceWorkbookImportId: draft.sourceWorkbookImportId,
     sourceWorksheetId: draft.sourceWorksheetId,
     columns: draft.columns.map((column) => ({

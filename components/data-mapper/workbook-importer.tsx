@@ -4,7 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import type ExcelJS from "exceljs";
 import { useRouter } from "next/navigation";
 import { ArrowDownUp, FileSpreadsheet, LoaderCircle, Search, Upload } from "lucide-react";
-import type { UploadedWorkbookDetails, ValidationIssueCategory, ValidationSeverity, WorkbookSummary, WorkbookValidationResult, WorksheetPreview } from "@/lib/data-mapper/types";
+import type { UploadedWorkbookDetails, ValidationIssueCategory, WorkbookSummary, WorkbookValidationResult, WorksheetPreview } from "@/lib/data-mapper/types";
 import { createWorksheetPreview, friendlyExcelImportMessage, readWorkbook } from "@/lib/data-mapper/excel-import";
 import { validateWorkbook } from "@/lib/data-mapper/validation";
 import { uploadSourceWorkbookDirectly } from "@/lib/data-mapper/source-workbook-direct-upload";
@@ -20,6 +20,14 @@ import {
   worksheetTabId
 } from "@/components/data-mapper/workbook-explorer-ui";
 import { ValidationNextSteps } from "@/components/data-mapper/validation-next-steps";
+import {
+  groupValidationIssuesByRow,
+  issueMatchesPreviewFilters,
+  rowSeverityLabel,
+  sourceCellValidationState,
+  validationIssuesForWorksheet,
+  type PreviewValidationFilters
+} from "@/lib/data-mapper/validation-preview";
 
 type SortDirection = "asc" | "desc";
 
@@ -30,11 +38,7 @@ type SortState = {
 
 type PreviewDataRow = { cells: string[]; physicalRowNumber: number };
 
-type ValidationFilters = {
-  severity: "All" | ValidationSeverity;
-  category: "All" | ValidationIssueCategory;
-  worksheetName: "All" | string;
-};
+type ValidationFilters = PreviewValidationFilters;
 
 const validationCategoryLabels: Record<ValidationIssueCategory, string> = {
   "duplicate-sku": "Duplicate SKU",
@@ -58,7 +62,7 @@ function formatDateTime(value: string) {
   }).format(new Date(value));
 }
 
-function visibleRows(preview: WorksheetPreview | null, searchTerm: string, sort: SortState) {
+export function visibleRows(preview: WorksheetPreview | null, searchTerm: string, sort: SortState) {
   if (!preview) return [];
   const normalisedSearch = searchTerm.trim().toLowerCase();
   const dataRows: PreviewDataRow[] = preview.rows.map((cells, index) => ({
@@ -85,8 +89,9 @@ export function WorkbookImporter({ canPrepareOutputProfiles }: { canPrepareOutpu
   const [workbook, setWorkbook] = useState<ExcelJS.Workbook | null>(null);
   const [summary, setSummary] = useState<WorkbookSummary | null>(null);
   const [validation, setValidation] = useState<WorkbookValidationResult | null>(null);
-  const [validationFilters, setValidationFilters] = useState<ValidationFilters>({ severity: "All", category: "All", worksheetName: "All" });
-  const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
+  const [validationFilters, setValidationFilters] = useState<ValidationFilters>({ severity: "All", category: "All" });
+  const [ignoredFingerprints, setIgnoredFingerprints] = useState<Set<string>>(() => new Set());
+  const [selectedFingerprints, setSelectedFingerprints] = useState<Set<string>>(() => new Set());
   const [uploadDetails, setUploadDetails] = useState<UploadedWorkbookDetails | null>(null);
   const [selectedUploadDetails, setSelectedUploadDetails] = useState<UploadedWorkbookDetails | null>(null);
   const [selectedWorksheetName, setSelectedWorksheetName] = useState<string | null>(null);
@@ -106,18 +111,13 @@ export function WorkbookImporter({ canPrepareOutputProfiles }: { canPrepareOutpu
     if (!worksheet) return null;
     return createWorksheetPreview(selectedWorksheet.name, worksheet, selectedWorksheet);
   }, [selectedWorksheet, workbook]);
-  const rows = useMemo(() => visibleRows(preview, searchTerm, sort), [preview, searchTerm, sort]);
+  const worksheetIssues = useMemo(() => validationIssuesForWorksheet(validation?.issues ?? [], selectedWorksheetName ?? "", ignoredFingerprints), [ignoredFingerprints, selectedWorksheetName, validation]);
+  const matchingWorksheetIssues = useMemo(() => worksheetIssues.filter((issue) => issueMatchesPreviewFilters(issue, validationFilters)), [validationFilters, worksheetIssues]);
+  const issuesByRow = useMemo(() => groupValidationIssuesByRow(matchingWorksheetIssues), [matchingWorksheetIssues]);
+  const validationFilterActive = validationFilters.severity !== "All" || validationFilters.category !== "All";
+  const rows = useMemo(() => visibleRows(preview, searchTerm, sort).filter((row) => !validationFilterActive || issuesByRow.has(row.physicalRowNumber)), [issuesByRow, preview, searchTerm, sort, validationFilterActive]);
   const issueCountsByWorksheet = useMemo(() => countWorksheetIssues(validation?.issues ?? []), [validation]);
-  const rowValidationStates = useMemo(() => worksheetRowValidationStates(validation?.issues ?? [], selectedWorksheetName ?? ""), [validation, selectedWorksheetName]);
-  const filteredIssues = useMemo(() => {
-    if (!validation) return [];
-    return validation.issues.filter((issue) => {
-      const severityMatch = validationFilters.severity === "All" || issue.severity === validationFilters.severity;
-      const categoryMatch = validationFilters.category === "All" || issue.category === validationFilters.category;
-      const worksheetMatch = validationFilters.worksheetName === "All" || issue.worksheetName === validationFilters.worksheetName;
-      return severityMatch && categoryMatch && worksheetMatch;
-    });
-  }, [validation, validationFilters]);
+  const rowValidationStates = useMemo(() => worksheetRowValidationStates(worksheetIssues, selectedWorksheetName ?? ""), [selectedWorksheetName, worksheetIssues]);
 
   async function handleFile(file: File) {
     setIsLoading(true);
@@ -140,8 +140,9 @@ export function WorkbookImporter({ canPrepareOutputProfiles }: { canPrepareOutpu
       setSummary(result.summary);
       setValidation(validationResult);
       setSelectedFile(file);
-      setValidationFilters({ severity: "All", category: "All", worksheetName: "All" });
-      setSelectedIssueId(null);
+      setValidationFilters({ severity: "All", category: "All" });
+      setIgnoredFingerprints(new Set());
+      setSelectedFingerprints(new Set());
       setUploadDetails(currentUploadDetails);
       setSelectedWorksheetName(result.summary.worksheets[0]?.name ?? null);
     } catch (importError) {
@@ -182,7 +183,7 @@ export function WorkbookImporter({ canPrepareOutputProfiles }: { canPrepareOutpu
     setUploadProgress(0);
     setProfileError(null);
     try {
-      const result = await uploadSourceWorkbookDirectly(selectedFile, { worksheetName: selectedWorksheetName, onProgress: setUploadProgress });
+      const result = await uploadSourceWorkbookDirectly(selectedFile, { worksheetName: selectedWorksheetName, ignoredValidationFingerprints: [...ignoredFingerprints], onProgress: setUploadProgress });
       router.push(result.mappingUrl);
     } catch (profilePreparationError) {
       setProfileError(profilePreparationError instanceof Error ? profilePreparationError.message : "The workbook could not be prepared for an Output Profile.");
@@ -295,13 +296,15 @@ export function WorkbookImporter({ canPrepareOutputProfiles }: { canPrepareOutpu
             <div className="sectionHeader workbookPreviewHeader">
               <div>
                 <h2>Worksheet preview</h2>
-                <p className="muted">Choose a worksheet to inspect its first {preview?.previewRowLimit ?? 100} data rows.</p>
+                <p className="muted">Choose a worksheet to inspect its first {preview?.previewRowLimit ?? 100} data rows and validation issues.</p>
               </div>
-              <label className="searchBox">
-                <Search aria-hidden="true" size={18} />
-                <span className="visuallyHidden">Search worksheet preview</span>
-                <input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Search preview" />
-              </label>
+              <div className="workbookPreviewControls">
+                <label className="searchBox"><Search aria-hidden="true" size={18} /><span className="visuallyHidden">Search worksheet preview</span><input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Search preview" /></label>
+                <div className="validationFilters">
+                  <label className="field"><span>Severity</span><select value={validationFilters.severity} onChange={(event) => setValidationFilters((current) => ({ ...current, severity: event.target.value as ValidationFilters["severity"] }))}><option>All</option><option>Error</option><option>Warning</option></select></label>
+                  <label className="field"><span>Issue type</span><select value={validationFilters.category} onChange={(event) => setValidationFilters((current) => ({ ...current, category: event.target.value as ValidationFilters["category"] }))}><option>All</option>{Object.entries(validationCategoryLabels).map(([category, label]) => <option key={category} value={category}>{label}</option>)}</select></label>
+                </div>
+              </div>
             </div>
 
             <WorksheetTabs
@@ -316,6 +319,12 @@ export function WorkbookImporter({ canPrepareOutputProfiles }: { canPrepareOutpu
               <span className="worksheetRowLegendItem rowWarning"><span aria-hidden="true" />Warning</span>
               <span className="worksheetRowLegendItem rowIgnoredError"><span aria-hidden="true" />Ignored error</span>
             </div>
+            {validation && validation.issues.some((issue) => issue.severity === "Error") ? <div className="actions validationPreviewActions">
+              <button className="secondary" type="button" disabled={selectedFingerprints.size === 0} onClick={() => setIgnoredFingerprints((current) => new Set([...current, ...selectedFingerprints]))}>Ignore selected</button>
+              <button className="secondary" type="button" disabled={[...selectedFingerprints].every((fingerprint) => !ignoredFingerprints.has(fingerprint))} onClick={() => setIgnoredFingerprints((current) => { const next = new Set(current); selectedFingerprints.forEach((fingerprint) => next.delete(fingerprint)); return next; })}>Restore selected</button>
+              <button className="secondary" type="button" onClick={() => setIgnoredFingerprints(new Set(validation.issues.filter((issue) => issue.severity === "Error").map((issue) => issue.fingerprint)))}>Ignore all blocking errors</button>
+              <button className="secondary" type="button" disabled={ignoredFingerprints.size === 0} onClick={() => setIgnoredFingerprints(new Set())}>Restore all ignored errors</button>
+            </div> : null}
 
             <div
               aria-labelledby={worksheetTabId(Math.max(0, summary.worksheets.findIndex((worksheet) => worksheet.name === selectedWorksheetName)))}
@@ -332,11 +341,15 @@ export function WorkbookImporter({ canPrepareOutputProfiles }: { canPrepareOutpu
                 />
               ) : null}
 
-              {preview && preview.headers.length > 0 ? (
+              {preview && preview.headers.length > 0 && (rows.length > 0 || !validationFilterActive) ? (
                 <div className="previewTableWrap">
                   <table className="previewTable">
                     <thead>
                       <tr>
+                        <th className="validationSelectionColumn"><span className="visuallyHidden">Select validation issues</span></th>
+                        <th className="validationSeverityColumn">Severity</th>
+                        <th className="validationValueColumn">Current value</th>
+                        <th className="validationMessageColumn">Rule / message</th>
                         {preview.headers.map((header, index) => (
                           <th key={`${header}-${index}`}>
                             <button type="button" onClick={() => updateSort(index)}>
@@ -351,10 +364,17 @@ export function WorkbookImporter({ canPrepareOutputProfiles }: { canPrepareOutpu
                       {rows.map((row) => {
                         const rowState = rowValidationStates.get(row.physicalRowNumber) ?? "normal";
                         const rowDescription = worksheetRowValidationDescription(rowState);
+                        const rowIssues = issuesByRow.get(row.physicalRowNumber) ?? [];
+                        const blockingIssues = rowIssues.filter((issue) => issue.severity === "Error");
+                        const allBlockingSelected = blockingIssues.length > 0 && blockingIssues.every((issue) => selectedFingerprints.has(issue.fingerprint));
                         return (
                         <tr aria-label={`${rowDescription}, worksheet row ${row.physicalRowNumber}`} className={rowState === "normal" ? undefined : `worksheetDataRow ${rowState}`} key={`${selectedWorksheetName}-${row.physicalRowNumber}`}>
+                          <td className="validationSelectionColumn">{blockingIssues.length > 0 ? <input type="checkbox" aria-label={`Select ${blockingIssues.length} blocking ${blockingIssues.length === 1 ? "issue" : "issues"} on worksheet row ${row.physicalRowNumber}`} checked={allBlockingSelected} onChange={(event) => setSelectedFingerprints((current) => { const next = new Set(current); blockingIssues.forEach((issue) => event.target.checked ? next.add(issue.fingerprint) : next.delete(issue.fingerprint)); return next; })} /> : null}</td>
+                          <td className="validationSeverityColumn"><span className={rowState === "error" ? "badge danger" : rowState === "warning" ? "badge warning" : rowState === "ignored-error" ? "badge" : ""}>{rowSeverityLabel(rowIssues)}</span></td>
+                          <td className="validationValueColumn"><span className="validationIssueStack">{rowIssues.slice(0, 3).map((issue) => <span key={issue.fingerprint}>{issue.currentValue || "Blank"}</span>)}{rowIssues.length > 3 ? <small>+ {rowIssues.length - 3} more</small> : null}</span></td>
+                          <td className="validationMessageColumn"><span className="validationIssueStack">{rowIssues.slice(0, 3).map((issue) => <span key={issue.fingerprint}>{issue.message}</span>)}{rowIssues.length > 3 ? <small>+ {rowIssues.length - 3} more</small> : null}</span></td>
                           {preview.headers.map((header, columnIndex) => (
-                            <td key={`${header}-${columnIndex}`}>
+                            <td className={sourceCellValidationState(rowIssues, header) === "normal" ? undefined : `validationSourceCell ${sourceCellValidationState(rowIssues, header)}`} key={`${header}-${columnIndex}`}>
                               {columnIndex === 0 && rowState !== "normal" ? <span className="visuallyHidden">{rowDescription}. </span> : null}
                               {row.cells[columnIndex]}
                             </td>
@@ -365,6 +385,8 @@ export function WorkbookImporter({ canPrepareOutputProfiles }: { canPrepareOutpu
                     </tbody>
                   </table>
                 </div>
+              ) : validationFilterActive ? (
+                <div className="emptyState"><h2>No worksheet rows match these validation filters</h2><p className="muted">Adjust Severity or Issue type to review other rows.</p></div>
               ) : (
                 <div className="emptyState">
                   <h2>No preview available</h2>
@@ -373,72 +395,6 @@ export function WorkbookImporter({ canPrepareOutputProfiles }: { canPrepareOutpu
               )}
             </div>
           </section>
-
-          {validation ? (
-            <section className="card">
-              <div className="sectionHeader">
-                <div>
-                  <h2>Validation issues</h2>
-                  <p className="muted">{filteredIssues.length.toLocaleString("en-GB")} of {validation.issues.length.toLocaleString("en-GB")} issues shown.</p>
-                </div>
-                <div className="validationFilters">
-                  <label className="field">
-                    <span>Severity</span>
-                    <select value={validationFilters.severity} onChange={(event) => setValidationFilters((current) => ({ ...current, severity: event.target.value as ValidationFilters["severity"] }))}>
-                      <option>All</option>
-                      <option>Error</option>
-                      <option>Warning</option>
-                    </select>
-                  </label>
-                  <label className="field">
-                    <span>Issue type</span>
-                    <select value={validationFilters.category} onChange={(event) => setValidationFilters((current) => ({ ...current, category: event.target.value as ValidationFilters["category"] }))}>
-                      <option>All</option>
-                      {Object.entries(validationCategoryLabels).map(([category, label]) => (
-                        <option key={category} value={category}>{label}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="field">
-                    <span>Worksheet</span>
-                    <select value={validationFilters.worksheetName} onChange={(event) => setValidationFilters((current) => ({ ...current, worksheetName: event.target.value }))}>
-                      <option>All</option>
-                      {summary.worksheets.map((worksheet) => (
-                        <option key={worksheet.name} value={worksheet.name}>{worksheet.name}</option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-              </div>
-
-              {filteredIssues.length > 0 ? (
-                <div className="previewTableWrap validationIssueWrap">
-                  <table className="previewTable validationIssueTable">
-                    <thead>
-                      <tr><th>Severity</th><th>Worksheet</th><th>Row</th><th>Source column</th><th>Current value</th><th>Rule/message</th></tr>
-                    </thead>
-                    <tbody>
-                      {filteredIssues.map((issue) => (
-                        <tr className={selectedIssueId === issue.id ? "selectedIssue" : undefined} key={issue.id} onClick={() => setSelectedIssueId(issue.id)}>
-                          <td><span className={issue.severity === "Error" ? "badge danger" : "badge warning"}>{issue.severity}</span></td>
-                          <td>{issue.worksheetName}</td>
-                          <td>{issue.rowNumber}</td>
-                          <td>{issue.field}</td>
-                          <td>{issue.currentValue || "Blank"}</td>
-                          <td>{issue.message}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="emptyState">
-                  <h2>No issues match these filters</h2>
-                  <p className="muted">Adjust the filters to review other validation results.</p>
-                </div>
-              )}
-            </section>
-          ) : null}
 
           {validation && selectedFile ? (
             <ValidationNextSteps

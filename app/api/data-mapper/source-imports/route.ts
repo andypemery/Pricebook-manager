@@ -15,10 +15,10 @@ export async function POST(request: Request) {
   }
 
   try {
-    const body = await request.json() as { uploadIntent?: unknown; worksheetName?: unknown };
+    const body = await request.json() as { uploadIntent?: unknown; worksheetName?: unknown; ignoredValidationFingerprints?: unknown };
     if (typeof body.uploadIntent !== "string") return NextResponse.json({ error: "Upload the workbook directly to private storage before registering it." }, { status: 400 });
     const requestedWorksheetName = typeof body.worksheetName === "string" ? body.worksheetName : "";
-    const sourceImport = await finaliseSourceWorkbookUpload(prisma, actor, { uploadIntent: body.uploadIntent, worksheetName: requestedWorksheetName });
+    const sourceImport = await finaliseSourceWorkbookUpload(prisma, actor, { uploadIntent: body.uploadIntent, worksheetName: requestedWorksheetName, ignoredValidationFingerprints: body.ignoredValidationFingerprints });
     const selectedWorksheet = sourceImport.worksheets.find((worksheet) => worksheet.name === requestedWorksheetName) ?? sourceImport.worksheets[0];
     if (!selectedWorksheet) return NextResponse.json({ error: "The workbook does not contain a worksheet available for Output Profiles." }, { status: 400 });
     await audit({

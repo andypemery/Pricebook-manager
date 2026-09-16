@@ -29,6 +29,12 @@ export type OutputProfileFilterOperator = (typeof filterOperators)[number];
 export const outputFormats = ["CSV", "XLSX"] as const;
 export type OutputProfileFormat = (typeof outputFormats)[number];
 
+export const worksheetModes = ["COMBINE", "SEPARATE_WORKSHEETS", "SEPARATE_FILES"] as const;
+export type OutputProfileWorksheetMode = (typeof worksheetModes)[number];
+
+export const worksheetNameModes = ["SOURCE", "CUSTOM"] as const;
+export type OutputProfileWorksheetNameMode = (typeof worksheetNameModes)[number];
+
 export const csvDelimiters = ["COMMA", "SEMICOLON", "TAB", "PIPE"] as const;
 export type OutputProfileCsvDelimiter = (typeof csvDelimiters)[number];
 
@@ -39,6 +45,14 @@ export type SourceWorksheetPreview = {
   worksheetName: string;
   headers: string[];
   sampleRows: string[][];
+  workbookWorksheets?: SourceWorkbookWorksheet[];
+};
+
+export type SourceWorkbookWorksheet = {
+  id: string;
+  name: string;
+  position: number;
+  headers: string[];
 };
 
 export type OutputProfileColumnDraft = {
@@ -69,6 +83,10 @@ export type OutputProfileDraft = {
   csvDelimiter: OutputProfileCsvDelimiter;
   csvIncludeHeader: boolean;
   xlsxWorksheetName: string;
+  worksheetMode?: OutputProfileWorksheetMode;
+  worksheetNameMode?: OutputProfileWorksheetNameMode;
+  worksheetNameMappings?: Record<string, string>;
+  selectedWorksheetIds?: string[];
   sourceWorkbookImportId: string;
   sourceWorksheetId: string;
   columns: OutputProfileColumnDraft[];
@@ -84,11 +102,18 @@ export type SaveOutputProfileInput = {
   csvDelimiter: OutputProfileCsvDelimiter;
   csvIncludeHeader: boolean;
   xlsxWorksheetName: string;
+  worksheetMode?: OutputProfileWorksheetMode;
+  worksheetNameMode?: OutputProfileWorksheetNameMode;
+  worksheetNameMappings?: Record<string, string>;
   sourceWorkbookImportId: string;
   sourceWorksheetId: string;
   columns: Array<Omit<OutputProfileColumnDraft, "clientId">>;
   filterMatchMode: OutputProfileFilterMatchMode;
   filters: Array<Omit<OutputProfileFilterDraft, "clientId">>;
+};
+
+export type GenerateOutputProfileInput = SaveOutputProfileInput & {
+  selectedWorksheetIds?: string[];
 };
 
 export type SaveOutputProfileResult =

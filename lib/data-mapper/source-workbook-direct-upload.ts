@@ -60,6 +60,7 @@ export async function uploadSourceWorkbookDirectly(
   file: File,
   options: {
     worksheetName?: string | null;
+    ignoredValidationFingerprints?: string[];
     replaceSourceWorkbookImportId?: string;
     onProgress?: (percentage: number) => void;
     signal?: AbortSignal;
@@ -101,7 +102,7 @@ export async function uploadSourceWorkbookDirectly(
   const registrationResponse = await request("/api/data-mapper/source-imports", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ uploadIntent: authorisation.uploadIntent, worksheetName: options.worksheetName }),
+    body: JSON.stringify({ uploadIntent: authorisation.uploadIntent, worksheetName: options.worksheetName, ignoredValidationFingerprints: options.ignoredValidationFingerprints }),
     signal: options.signal
   });
   const registration = await registrationResponse.json() as Partial<SourceWorkbookRegistrationResponse> & { error?: string };

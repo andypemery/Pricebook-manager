@@ -187,6 +187,39 @@ describe("Sprint 4 acceptance filter and output settings UI", () => {
     expect(xlsxMarkup).toContain("The tab name inside the Excel workbook");
     expect(xlsxMarkup).not.toContain("Effective preview date");
   });
+
+  it("shows reusable worksheet modes, current-workbook selection, compatibility and compact ZIP examples", () => {
+    const markup = renderToStaticMarkup(createElement(OutputProfileSettings, {
+      profile: profile({
+        name: "NHS",
+        worksheetMode: "SEPARATE_FILES",
+        worksheetNameMode: "CUSTOM",
+        worksheetNameMappings: { "hp print": "HP", "canon print": "Canon" },
+        selectedWorksheetIds: ["sheet-1", "sheet-2"],
+        columns: [{ clientId: "column-1", columnType: "SOURCE", sourceColumnIndex: 0, sourceHeading: "SKU", outputHeading: "SKU", staticValue: "", adjustmentType: "NONE", adjustmentValue: "", roundingDecimalPlaces: null }]
+      }),
+      sourceFilename: "Supplier.xlsx",
+      worksheets: [
+        { id: "sheet-1", name: "HP Print", position: 0, headers: ["SKU"] },
+        { id: "sheet-2", name: "Canon Print", position: 1, headers: ["SKU"] },
+        { id: "sheet-3", name: "Software", position: 2, headers: ["Description"] }
+      ],
+      filenameDate: "2026-09-16",
+      canEdit: true,
+      onChange: vi.fn(),
+      onFilenameDateChange: vi.fn()
+    }));
+    expect(markup).toContain("Combine all worksheets into one");
+    expect(markup).toContain("Keep source worksheets separate");
+    expect(markup).toContain("Create a separate file for each worksheet");
+    expect(markup).toContain("Worksheets to include");
+    expect(markup).toContain("This selection applies only to the current workbook");
+    expect(markup).toContain("Software");
+    expect(markup).toContain("Needs attention");
+    expect(markup).toContain("NHS_September_2026.zip");
+    expect(markup).toContain("NHS_September_2026_HP.csv");
+    expect(markup).toContain("NHS_September_2026_Canon.csv");
+  });
 });
 
 describe("Sprint 4 current Output Profile page cleanup", () => {

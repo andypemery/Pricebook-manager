@@ -133,6 +133,17 @@ enum OutputProfileCsvDelimiter {
   PIPE
 }
 
+enum OutputProfileWorksheetMode {
+  COMBINE
+  SEPARATE_WORKSHEETS
+  SEPARATE_FILES
+}
+
+enum OutputProfileWorksheetNameMode {
+  SOURCE
+  CUSTOM
+}
+
 model Tenant {
   id        String       @id @default(cuid())
   name      String
@@ -754,6 +765,9 @@ model OutputProfile {
   csvDelimiter           OutputProfileCsvDelimiter    @default(COMMA)
   csvIncludeHeader       Boolean                      @default(true)
   xlsxWorksheetName      String?
+  worksheetMode          OutputProfileWorksheetMode     @default(COMBINE)
+  worksheetNameMode      OutputProfileWorksheetNameMode @default(SOURCE)
+  worksheetNameMappings  Json                           @default("{}")
   createdById            String?
   createdBy              User?                        @relation("OutputProfileCreator", fields: [createdById], references: [id])
   updatedById            String?

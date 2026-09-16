@@ -8,6 +8,8 @@ import type {
   SourceWorksheetPreview
 } from "@/lib/data-mapper/output-profiles/types";
 import { stringArrayFromJson, stringMatrixFromJson, validateOutputProfileInput } from "@/lib/data-mapper/output-profiles/validation";
+import { resolveWorksheetCompatibility } from "@/lib/data-mapper/output-profiles/worksheet-compatibility";
+import { normaliseWorksheetIdentity } from "@/lib/data-mapper/output-profiles/configuration";
 
 export class OutputProfileNotFoundError extends Error {}
 
@@ -22,12 +24,25 @@ export async function saveOutputProfileForTenant(
       sourceWorkbookImportId: input.sourceWorkbookImportId,
       sourceWorkbookImport: { tenantId: actor.tenantId }
     },
-    select: { headers: true, sourceWorkbookImport: { select: { originalFileName: true } } }
+    select: {
+      name: true,
+      headers: true,
+      sourceWorkbookImport: { select: { originalFileName: true, worksheets: { orderBy: { position: "asc" }, select: { name: true } } } }
+    }
   });
   if (!sourceWorksheet) throw new OutputProfileNotFoundError("The selected source worksheet is not available.");
 
   const canonicalHeaders = stringArrayFromJson(sourceWorksheet.headers, "Source headings");
-  const valid = validateOutputProfileInput(input, canonicalHeaders, sourceWorksheet.sourceWorkbookImport.originalFileName);
+  const canonicalWorksheetNames = (sourceWorksheet.sourceWorkbookImport.worksheets ?? [])
+    .map((worksheet) => worksheet.name)
+    .filter((name): name is string => typeof name === "string" && name.length > 0);
+  if (typeof sourceWorksheet.name === "string" && sourceWorksheet.name && canonicalWorksheetNames.length === 0) canonicalWorksheetNames.push(sourceWorksheet.name);
+  const valid = validateOutputProfileInput(
+    input,
+    canonicalHeaders,
+    sourceWorksheet.sourceWorkbookImport.originalFileName,
+    canonicalWorksheetNames
+  );
   const columnData = valid.columns.map((column, position) => ({ ...column, position }));
   const filterData = valid.filters.map((filter, position) => ({ ...filter, position }));
   const configuration = {
@@ -37,6 +52,9 @@ export async function saveOutputProfileForTenant(
     csvDelimiter: valid.csvDelimiter,
     csvIncludeHeader: valid.csvIncludeHeader,
     xlsxWorksheetName: valid.xlsxWorksheetName,
+    worksheetMode: valid.worksheetMode,
+    worksheetNameMode: valid.worksheetNameMode,
+    worksheetNameMappings: valid.worksheetNameMappings,
     sourceWorkbookImportId: valid.sourceWorkbookImportId,
     sourceWorksheetId: valid.sourceWorksheetId,
     filterMatchMode: valid.filterMatchMode,
@@ -150,6 +168,9 @@ export async function loadOutputProfileBuilder(
         csvDelimiter: true,
         csvIncludeHeader: true,
         xlsxWorksheetName: true,
+        worksheetMode: true,
+        worksheetNameMode: true,
+        worksheetNameMappings: true,
         filterMatchMode: true,
         sourceWorkbookImportId: true,
         sourceWorksheetId: true,
@@ -171,23 +192,31 @@ export async function loadOutputProfileBuilder(
           orderBy: { position: "asc" },
           select: { id: true, sourceColumnIndex: true, sourceHeading: true, operator: true, comparisonValue: true }
         },
-        sourceWorkbookImport: { select: { originalFileName: true } },
+        sourceWorkbookImport: {
+          select: {
+            originalFileName: true,
+            worksheets: { orderBy: { position: "asc" }, select: { id: true, name: true, position: true, headers: true } }
+          }
+        },
         sourceWorksheet: { select: { id: true, name: true, headers: true, sampleRows: true } }
       }
     });
     if (!profile) return null;
     const headers = stringArrayFromJson(profile.sourceWorksheet.headers, "Source headings");
     const sampleRows = stringMatrixFromJson(profile.sourceWorksheet.sampleRows, "Source sample rows").slice(0, 3);
-    return {
-      source: {
-        id: profile.sourceWorksheet.id,
-        sourceWorkbookImportId: profile.sourceWorkbookImportId,
-        workbookFileName: profile.sourceWorkbookImport.originalFileName,
-        worksheetName: profile.sourceWorksheet.name,
-        headers,
-        sampleRows
-      },
-      draft: {
+    const workbookWorksheets = (profile.sourceWorkbookImport.worksheets ?? []).map((worksheet) => ({
+      id: worksheet.id,
+      name: worksheet.name,
+      position: worksheet.position,
+      headers: stringArrayFromJson(worksheet.headers, "Source headings")
+    }));
+    const effectiveWorksheets = workbookWorksheets.length > 0 ? workbookWorksheets : [{
+      id: profile.sourceWorksheet.id,
+      name: profile.sourceWorksheet.name,
+      position: 0,
+      headers
+    }];
+    const draftWithoutSelection: Omit<OutputProfileDraft, "selectedWorksheetIds"> = {
         id: profile.id,
         name: profile.name,
         filenameTemplate: profile.filenameTemplate,
@@ -195,6 +224,9 @@ export async function loadOutputProfileBuilder(
         csvDelimiter: profile.csvDelimiter,
         csvIncludeHeader: profile.csvIncludeHeader,
         xlsxWorksheetName: profile.xlsxWorksheetName ?? "",
+        worksheetMode: profile.worksheetMode ?? "COMBINE",
+        worksheetNameMode: profile.worksheetNameMode ?? "SOURCE",
+        worksheetNameMappings: jsonStringRecord(profile.worksheetNameMappings),
         sourceWorkbookImportId: profile.sourceWorkbookImportId,
         sourceWorksheetId: profile.sourceWorksheetId,
         filterMatchMode: profile.filterMatchMode,
@@ -207,7 +239,7 @@ export async function loadOutputProfileBuilder(
           staticValue: column.staticValue ?? "",
           adjustmentType: column.adjustmentType,
           adjustmentValue: column.adjustmentValue?.toString() ?? "",
-          roundingDecimalPlaces: column.roundingDecimalPlaces as 0 | 1 | 2 | 3 | 4 | null
+          roundingDecimalPlaces: column.roundingDecimalPlaces as 0 | 1 | 2 | 3 | 4 | 5 | 6 | null
         })),
         filters: profile.filters.map((filter) => ({
           clientId: filter.id,
@@ -216,7 +248,24 @@ export async function loadOutputProfileBuilder(
           operator: filter.operator,
           comparisonValue: filter.comparisonValue ?? ""
         }))
-      }
+      };
+    const draft = {
+      ...draftWithoutSelection,
+      selectedWorksheetIds: effectiveWorksheets
+        .filter((worksheet) => resolveWorksheetCompatibility(draftWithoutSelection, worksheet.headers).compatible)
+        .map((worksheet) => worksheet.id)
+    } satisfies OutputProfileDraft;
+    return {
+      source: {
+        id: profile.sourceWorksheet.id,
+        sourceWorkbookImportId: profile.sourceWorkbookImportId,
+        workbookFileName: profile.sourceWorkbookImport.originalFileName,
+        worksheetName: profile.sourceWorksheet.name,
+        headers,
+        sampleRows,
+        workbookWorksheets: effectiveWorksheets
+      },
+      draft
     };
   }
 
@@ -234,7 +283,12 @@ export async function loadOutputProfileBuilder(
         headers: true,
         sampleRows: true,
         sourceWorkbookImportId: true,
-        sourceWorkbookImport: { select: { originalFileName: true } }
+        sourceWorkbookImport: {
+          select: {
+            originalFileName: true,
+            worksheets: { orderBy: { position: "asc" }, select: { id: true, name: true, position: true, headers: true } }
+          }
+        }
       }
     }),
     selection.applyProfileId
@@ -242,13 +296,25 @@ export async function loadOutputProfileBuilder(
       : Promise.resolve(null)
   ]);
   if (!worksheet) return null;
+  const workbookWorksheets = (worksheet.sourceWorkbookImport.worksheets ?? []).map((item) => ({
+    id: item.id,
+    name: item.name,
+    position: item.position,
+    headers: stringArrayFromJson(item.headers, "Source headings")
+  }));
   const source = {
     id: worksheet.id,
     sourceWorkbookImportId: worksheet.sourceWorkbookImportId,
     workbookFileName: worksheet.sourceWorkbookImport.originalFileName,
     worksheetName: worksheet.name,
     headers: stringArrayFromJson(worksheet.headers, "Source headings"),
-    sampleRows: stringMatrixFromJson(worksheet.sampleRows, "Source sample rows").slice(0, 3)
+    sampleRows: stringMatrixFromJson(worksheet.sampleRows, "Source sample rows").slice(0, 3),
+    workbookWorksheets: workbookWorksheets.length > 0 ? workbookWorksheets : [{
+      id: worksheet.id,
+      name: worksheet.name,
+      position: 0,
+      headers: stringArrayFromJson(worksheet.headers, "Source headings")
+    }]
   } satisfies SourceWorksheetPreview;
   if (selection.applyProfileId) {
     if (!reusableProfile) return null;
@@ -258,7 +324,19 @@ export async function loadOutputProfileBuilder(
       originWorkbookFileName: reusableProfile.source.workbookFileName,
       originWorksheetName: reusableProfile.source.worksheetName
     });
-    return { source, ...applied };
+    const currentWorksheetKeys = new Set(source.workbookWorksheets.map((item) => normaliseWorksheetIdentity(item.name)));
+    const currentWorksheetNameMappings = Object.fromEntries(Object.entries(applied.draft.worksheetNameMappings ?? {}).filter(([key]) => currentWorksheetKeys.has(key)));
+    return {
+      source,
+      ...applied,
+      draft: {
+        ...applied.draft,
+        worksheetNameMappings: currentWorksheetNameMappings,
+        selectedWorksheetIds: source.workbookWorksheets
+          .filter((item) => resolveWorksheetCompatibility(applied.draft, item.headers).compatible)
+          .map((item) => item.id)
+      }
+    };
   }
   return {
     source,
@@ -270,6 +348,10 @@ export async function loadOutputProfileBuilder(
       csvDelimiter: "COMMA",
       csvIncludeHeader: true,
       xlsxWorksheetName: "",
+      worksheetMode: "COMBINE",
+      worksheetNameMode: "SOURCE",
+      worksheetNameMappings: {},
+      selectedWorksheetIds: source.workbookWorksheets.map((item) => item.id),
       sourceWorkbookImportId: source.sourceWorkbookImportId,
       sourceWorksheetId: source.id,
       columns: [],
@@ -298,6 +380,9 @@ export async function duplicateOutputProfileForTenant(
       csvDelimiter: true,
       csvIncludeHeader: true,
       xlsxWorksheetName: true,
+      worksheetMode: true,
+      worksheetNameMode: true,
+      worksheetNameMappings: true,
       filterMatchMode: true,
       sourceWorkbookImportId: true,
       sourceWorksheetId: true,
@@ -329,6 +414,9 @@ export async function duplicateOutputProfileForTenant(
     csvDelimiter: profile.csvDelimiter,
     csvIncludeHeader: profile.csvIncludeHeader,
     xlsxWorksheetName: profile.xlsxWorksheetName ?? "",
+    worksheetMode: profile.worksheetMode ?? "COMBINE",
+    worksheetNameMode: profile.worksheetNameMode ?? "SOURCE",
+    worksheetNameMappings: jsonStringRecord(profile.worksheetNameMappings),
     sourceWorkbookImportId: profile.sourceWorkbookImportId,
     sourceWorksheetId: profile.sourceWorksheetId,
     columns: profile.columns.map((column) => ({
@@ -340,6 +428,11 @@ export async function duplicateOutputProfileForTenant(
     filterMatchMode: profile.filterMatchMode,
     filters: profile.filters.map((filter) => ({ ...filter, comparisonValue: filter.comparisonValue ?? "" }))
   });
+}
+
+function jsonStringRecord(value: unknown): Record<string, string> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === "string"));
 }
 
 export async function deleteOutputProfileForTenant(db: PrismaClient, tenantId: string, profileId: string) {

@@ -956,6 +956,8 @@ p { line-height: 1.6; }
   .theme-system .previewTable tbody .worksheetDataRow.warning td { background: #fff8df; }
   .theme-system .previewTable tbody .worksheetDataRow.ignored-error td { background: #fff5f5; }
 }
+.workbookPreviewControls { display: flex; align-items: end; justify-content: flex-end; gap: 12px; flex-wrap: wrap; }
+.workbookPreviewControls .validationFilters { grid-template-columns: repeat(2, minmax(150px, 1fr)); width: min(400px, 100%); }
 .validationFilters {
   display: grid;
   grid-template-columns: repeat(3, minmax(160px, 1fr));
@@ -963,15 +965,16 @@ p { line-height: 1.6; }
   width: min(680px, 100%);
 }
 .validationFilters .field { margin: 0; }
-.validationIssueWrap { max-height: 520px; }
-.validationIssueTable { width: 100%; }
-.validationIssueTable th, .validationIssueTable td {
-  min-width: 120px;
-  max-width: 420px;
-  white-space: normal;
-}
-.validationIssueTable tbody tr { cursor: pointer; }
-.validationIssueTable .selectedIssue td { background: rgba(0, 199, 243, 0.1); }
+.validationPreviewActions { margin: 12px 0; }
+.previewTable th.validationSelectionColumn, .previewTable td.validationSelectionColumn { min-width: 48px; width: 48px; text-align: center; }
+.previewTable th.validationSeverityColumn, .previewTable td.validationSeverityColumn { min-width: 150px; max-width: 180px; }
+.previewTable th.validationValueColumn, .previewTable td.validationValueColumn { min-width: 130px; max-width: 190px; white-space: normal; }
+.previewTable th.validationMessageColumn, .previewTable td.validationMessageColumn { min-width: 260px; max-width: 380px; white-space: normal; }
+.validationIssueStack { display: grid; gap: 4px; line-height: 1.35; }
+.validationIssueStack small { color: var(--text-muted); font-weight: 800; }
+.previewTable tbody .worksheetDataRow td.validationSourceCell.error { background: rgba(255, 40, 62, 0.28); box-shadow: inset 0 0 0 2px rgba(255, 89, 104, 0.58); }
+.previewTable tbody .worksheetDataRow td.validationSourceCell.warning { background: rgba(255, 190, 56, 0.27); box-shadow: inset 0 0 0 2px rgba(255, 190, 56, 0.52); }
+.previewTable tbody .worksheetDataRow td.validationSourceCell.ignored-error { background: rgba(201, 121, 130, 0.2); box-shadow: inset 0 0 0 1px rgba(201, 121, 130, 0.55); }
 .pagination { display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap; padding-top: 14px; color: var(--text-muted); }
 .pageControls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .pageButton { border: 1px solid var(--border-soft); border-radius: 10px; padding: 8px 10px; text-decoration: none; color: var(--text-main); }
@@ -1140,8 +1143,8 @@ p { line-height: 1.6; }
 }
 .outputColumnFields { display: grid; grid-template-columns: minmax(180px, 1.2fr) minmax(150px, 1fr) minmax(220px, 1.35fr) minmax(130px, 0.8fr) minmax(170px, 1fr); align-items: end; gap: 14px; }
 .outputColumnInspector .field, .outputColumnFields .field { margin: 0; }
-.sourceHeadingReference { min-height: 43px; display: grid; align-content: center; gap: 3px; }
-.sourceHeadingReference span { color: var(--text-muted); font-size: 0.76rem; font-weight: 800; text-transform: uppercase; }
+.sourceHeadingField > span { white-space: nowrap; }
+.sourceHeadingField input[readonly] { min-height: 43px; background: var(--surface-panel); color: var(--text-muted); cursor: default; }
 .outputColumnFields select { width: 100%; }
 .sheetHeaderActions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
 .numericInputWithSuffix { display: flex; align-items: stretch; }
@@ -1266,6 +1269,31 @@ p { line-height: 1.6; }
 .filenamePreview div { min-width: 0; display: grid; gap: 4px; }
 .filenamePreview span { color: var(--text-muted); font-size: 0.78rem; font-weight: 800; text-transform: uppercase; }
 .filenamePreview strong { overflow-wrap: anywhere; }
+.multiFilePreview small { color: var(--text-muted); overflow-wrap: anywhere; }
+.worksheetHandlingSettings, .worksheetNamingSettings { display: grid; gap: 10px; margin: 18px 0 0; padding: 16px; border: 1px solid var(--border-soft); border-radius: 12px; }
+.worksheetHandlingSettings legend, .worksheetNamingSettings legend { padding: 0 6px; font-weight: 800; }
+.worksheetHandlingSettings > label { display: flex; align-items: flex-start; gap: 10px; }
+.worksheetHandlingSettings input { margin-top: 3px; accent-color: var(--axiom-aqua); }
+.worksheetHandlingSettings label > span { display: grid; gap: 3px; }
+.worksheetHandlingSettings small, .worksheetSelectionPanel .muted, .worksheetSelection small { color: var(--text-muted); }
+.worksheetSelectionPanel { margin-top: 18px; padding: 16px; border: 1px solid var(--border-soft); border-radius: 12px; background: var(--surface-panel); }
+.worksheetSelectionPanel .sectionHeader.compact { align-items: flex-start; padding: 0 0 12px; background: transparent; }
+.worksheetSelectionPanel p { margin: 4px 0 0; }
+.worksheetSelectionList { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 9px; }
+.worksheetSelection { display: flex; align-items: flex-start; gap: 9px; padding: 10px; border: 1px solid var(--border-soft); border-radius: 10px; }
+.worksheetSelection > span { min-width: 0; display: grid; gap: 3px; }
+.worksheetSelection strong, .worksheetSelection small { overflow-wrap: anywhere; }
+.worksheetSelection.incompatible { opacity: 0.72; }
+.worksheetNameGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.worksheetNameGrid .field { margin: 0; }
+.validationReviewActions { margin: 14px 0; }
+.validationReviewBackdrop { position: fixed; z-index: 80; inset: 0; display: grid; place-items: center; padding: 24px; background: rgba(2, 1, 13, 0.78); }
+.validationReviewDialog { width: min(1180px, 100%); max-height: min(820px, calc(100vh - 48px)); overflow: hidden; display: flex; flex-direction: column; padding: 20px; border: 1px solid var(--border-soft); border-radius: 18px; background: var(--surface-card); box-shadow: 0 24px 80px rgba(0, 0, 0, 0.48); }
+.validationReviewDialog .sectionHeader { flex: 0 0 auto; padding: 0 0 14px; background: transparent; }
+.validationReviewTableWrap { flex: 1 1 auto; max-height: none; }
+.validationReviewTable th, .validationReviewTable td { min-width: 100px; max-width: 320px; white-space: normal; }
+.validationReviewTable th:first-child, .validationReviewTable td:first-child { min-width: 48px; width: 48px; text-align: center; }
+.validationReviewTable tr.ignored td { opacity: 0.78; }
 .warningText { display: flex; align-items: center; gap: 7px; color: #fbbf24; }
 .formatSettings { display: grid; grid-template-columns: repeat(2, minmax(180px, 1fr)); gap: 14px; align-items: end; margin-top: 18px; }
 .worksheetNameField { max-width: 440px; }
@@ -1318,11 +1346,16 @@ p { line-height: 1.6; }
   .workbookPreviewHeader { align-items: stretch; }
   .workbookPreviewHeader .searchBox { width: 100%; }
   .workbookPreviewHeader .searchBox input { min-width: 0; width: 100%; }
+  .workbookPreviewControls { align-items: stretch; width: 100%; }
+  .workbookPreviewControls .validationFilters { width: 100%; }
   .worksheetTab { min-width: 112px; max-width: 200px; }
   .selectedWorksheetSummary { flex-direction: column; }
   .selectedWorksheetDetails { width: 100%; }
   .selectedWorksheetIndicators { justify-content: flex-start; width: 100%; }
   .validationFilters { grid-template-columns: 1fr; }
+  .worksheetSelectionPanel .sectionHeader.compact { display: block; }
+  .worksheetSelectionPanel .sectionHeader.compact .actions { margin-top: 10px; }
+  .validationReviewBackdrop { padding: 10px; }
   .outputProfileIdentity, .sheetHeader { align-items: stretch; flex-direction: column; }
   .outputProfileSaveArea { justify-content: flex-start; }
   .outputProfileWorkspaceGrid, .filterRule, .profileManagerControls, .applySavedProfile, .outputProfileContext, .outputSettingsGrid, .formatSettings, .outputColumnFields { grid-template-columns: 1fr; }

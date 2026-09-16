@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cleanFilenameTemplate, defaultEffectiveDate, resolveOutputFilename, validateFilenameTemplate } from "../lib/data-mapper/output-profiles/filename";
+import { cleanFilenameTemplate, defaultEffectiveDate, resolveOutputFilename, resolveOutputPackageFilename, validateFilenameTemplate } from "../lib/data-mapper/output-profiles/filename";
 
 function resolve(overrides: Partial<Parameters<typeof resolveOutputFilename>[0]> = {}) {
   return resolveOutputFilename({
@@ -79,5 +79,21 @@ describe("shared Output Profile filename resolver", () => {
     expect(resolve({ profileName: "NHS/Contract", sourceFilename: "Supplier:Master.xlsx" }).finalFilename)
       .toBe("NHS-Contract_Supplier-Master_2026-09-13.csv");
     expect(resolve({ filenameTemplate: "CON" }).finalFilename).toBe("_CON.csv");
+  });
+
+  it("resolves and sanitises the worksheet token for separate files", () => {
+    expect(resolve({ filenameTemplate: "NHS_{worksheet}_{date}", worksheetName: "HP/Print" }).finalFilename)
+      .toBe("NHS_HP-Print_2026-09-13.csv");
+  });
+
+  it("appends a worksheet suffix without changing a token-free saved template", () => {
+    const result = resolve({ filenameTemplate: "NHS_{month}_{year}", worksheetName: "Canon Print", appendWorksheetSuffix: true });
+    expect(result.cleanTemplate).toBe("NHS_{month}_{year}");
+    expect(result.finalFilename).toBe("NHS_September_2026_Canon Print.csv");
+  });
+
+  it("omits the worksheet value from a deterministic ZIP package name", () => {
+    expect(resolveOutputPackageFilename({ filenameTemplate: "NHS_{worksheet}_{date}", profileName: "NHS", sourceFilename: "Source.xlsx", effectiveDate: "2026-09-13" }).finalFilename)
+      .toBe("NHS_2026-09-13.zip");
   });
 });

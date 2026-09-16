@@ -27,7 +27,7 @@ export function OutputColumnInspector({ column, canEdit, onChange }: {
 
         {isStatic ? (
           <>
-            <div className="sourceHeadingReference"><span>Type</span><strong>Fixed value</strong></div>
+            <label className="field sourceHeadingField"><span>Type</span><input value="Fixed value" readOnly aria-readonly="true" /></label>
             <label className="field">
               <span>Fixed value</span>
               <input value={column.staticValue} maxLength={500} disabled={!canEdit} onChange={(event) => onChange({ staticValue: event.target.value })} placeholder="For example, GBP" />
@@ -35,7 +35,7 @@ export function OutputColumnInspector({ column, canEdit, onChange }: {
           </>
         ) : (
           <>
-            <div className="sourceHeadingReference"><span>Source heading</span><strong>{column.sourceHeading}</strong></div>
+            <label className="field sourceHeadingField"><span>Source heading</span><input value={column.sourceHeading ?? ""} readOnly aria-readonly="true" /></label>
             <label className="field">
               <span>Value adjustment</span>
               <select value={column.adjustmentType} disabled={!canEdit} onChange={(event) => onChange({ adjustmentType: event.target.value as OutputProfileColumnDraft["adjustmentType"], adjustmentValue: "" })}>

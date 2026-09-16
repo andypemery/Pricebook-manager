@@ -23,12 +23,14 @@
     "@vercel/blob": "2.8.0",
     "bcryptjs": "2.4.3",
     "exceljs": "4.4.0",
+    "fflate": "0.8.3",
     "lucide-react": "0.468.0",
     "next": "16.3.4",
     "react": "19.2.7",
     "react-dom": "19.2.7"
   },
   "overrides": {
+    "baseline-browser-mapping": "2.11.24",
     "brace-expansion@1": "1.1.18",
     "brace-expansion@2": "2.1.4",
     "deepmerge-ts": "8.0.0",

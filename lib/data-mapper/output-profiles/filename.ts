@@ -8,7 +8,8 @@ export const filenameTokens = [
   "year_short",
   "date",
   "profile",
-  "source"
+  "source",
+  "worksheet"
 ] as const;
 
 export type FilenameToken = (typeof filenameTokens)[number];
@@ -21,7 +22,8 @@ export const filenameTokenLabels: Record<FilenameToken, string> = {
   year_short: "Short year",
   date: "Date",
   profile: "Profile name",
-  source: "Source filename"
+  source: "Source filename",
+  worksheet: "Worksheet name"
 };
 
 export const outputFormatExtensions: Record<OutputProfileFormat, string> = {
@@ -103,6 +105,8 @@ export function resolveOutputFilename(input: {
   sourceFilename: string;
   effectiveDate: string;
   outputFormat: OutputProfileFormat;
+  worksheetName?: string;
+  appendWorksheetSuffix?: boolean;
 }) {
   const errors = validateFilenameTemplate(input.filenameTemplate);
   const suppliedTemplate = typeof input.filenameTemplate === "string" ? input.filenameTemplate : "";
@@ -118,15 +122,18 @@ export function resolveOutputFilename(input: {
     year_short: parts?.yearShort ?? "",
     date: parts?.date ?? "",
     profile: safeFilenameText(input.profileName) || "Output Profile",
-    source: safeFilenameText(sourceBaseName(input.sourceFilename)) || "Source"
+    source: safeFilenameText(sourceBaseName(input.sourceFilename)) || "Source",
+    worksheet: safeFilenameText(input.worksheetName ?? "")
   };
 
   const cleanTemplate = cleanFilenameTemplate(suppliedTemplate);
   const resolved = cleanTemplate.replace(tokenPattern, (match, token: string) =>
     filenameTokens.includes(token as FilenameToken) ? tokenValues[token as FilenameToken] : match
   );
-  let safeBaseFilename = safeFilenameText(resolved);
-  if (safeBaseFilename !== resolved.trim().replace(/[. ]+$/g, "")) {
+  const needsWorksheetSuffix = input.appendWorksheetSuffix && !cleanTemplate.includes("{worksheet}");
+  const resolvedWithSuffix = needsWorksheetSuffix && tokenValues.worksheet ? `${resolved}_${tokenValues.worksheet}` : resolved;
+  let safeBaseFilename = safeFilenameText(resolvedWithSuffix);
+  if (safeBaseFilename !== resolvedWithSuffix.trim().replace(/[. ]+$/g, "")) {
     warnings.push("Unsafe filename characters were replaced in the preview.");
   }
   if (windowsReservedName.test(safeBaseFilename)) {
@@ -146,4 +153,18 @@ export function resolveOutputFilename(input: {
     errors: [...new Set(errors)],
     warnings: [...new Set(warnings)]
   };
+}
+
+export function resolveOutputPackageFilename(input: {
+  filenameTemplate: unknown;
+  profileName: string;
+  sourceFilename: string;
+  effectiveDate: string;
+}) {
+  const template = typeof input.filenameTemplate === "string"
+    ? input.filenameTemplate.replaceAll("{worksheet}", "").replace(/[_ -]{2,}/g, "_").replace(/^[_ -]+|[_ -]+$/g, "")
+    : input.filenameTemplate;
+  const resolved = resolveOutputFilename({ ...input, filenameTemplate: template || "{profile}_{date}", outputFormat: "CSV" });
+  const safeBaseFilename = resolved.safeBaseFilename || safeFilenameText(input.profileName) || "Output";
+  return { ...resolved, safeBaseFilename, finalFilename: `${safeBaseFilename}.zip` };
 }
