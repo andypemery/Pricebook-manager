@@ -92,6 +92,7 @@ describe("Excel import engine", () => {
 
     const preview = createWorksheetPreview("Products", worksheet, summary);
     expect(preview.rows).toHaveLength(previewRowLimit);
+    expect(preview.headerRowNumber).toBe(summary.detectedHeaderRow);
     expect(preview.rows[0]).toEqual(["SKU-1", "Product 1"]);
     expect(preview.rows[99]).toEqual(["SKU-100", "Product 100"]);
   });

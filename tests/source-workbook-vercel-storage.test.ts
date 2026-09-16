@@ -13,12 +13,12 @@ vi.mock("@vercel/blob", () => ({
   BlobNotFoundError: class BlobNotFoundError extends Error {}
 }));
 
-import { getSourceWorkbookStorage, sourceWorkbookStorageAvailable } from "../lib/data-mapper/source-workbook-storage";
+import { getSourceWorkbookStorage, sourceWorkbookStorageAvailable, sourceWorkbookStorageConfiguration } from "../lib/data-mapper/source-workbook-storage";
 
 describe("Vercel private Blob source storage", () => {
   beforeEach(() => {
-    process.env.VERCEL_OIDC_TOKEN = "test-oidc-token-not-logged";
     process.env.BLOB_STORE_ID = "store_test";
+    delete process.env.VERCEL_OIDC_TOKEN;
     delete process.env.BLOB_READ_WRITE_TOKEN;
     blobSdk.issueSignedToken.mockResolvedValue({ delegationToken: "delegation", clientSigningToken: "signing", validUntil: 2_000 });
     blobSdk.presignUrl.mockResolvedValue({ presignedUrl: "https://vercel.com/api/blob?signed" });
@@ -35,11 +35,13 @@ describe("Vercel private Blob source storage", () => {
   afterEach(() => {
     delete process.env.VERCEL_OIDC_TOKEN;
     delete process.env.BLOB_STORE_ID;
+    delete process.env.BLOB_READ_WRITE_TOKEN;
     vi.clearAllMocks();
   });
 
   it("uses OIDC-compatible signed PUT material scoped to one private path, operation, MIME and 20 MB limit", async () => {
     expect(sourceWorkbookStorageAvailable()).toBe(true);
+    expect(sourceWorkbookStorageConfiguration()).toBe("oidc");
     const storage = getSourceWorkbookStorage();
     const input = {
       storageKey: "source-workbooks/tenant-a/source-a/original.xlsx",
@@ -53,6 +55,29 @@ describe("Vercel private Blob source storage", () => {
     expect(blobSdk.presignUrl).toHaveBeenCalledWith(expect.objectContaining({ delegationToken: "delegation" }), expect.objectContaining({ access: "private", operation: "put", pathname: input.storageKey, allowOverwrite: false, addRandomSuffix: false }));
     expect(blobSdk.issueSignedToken.mock.calls[0]?.[0].operations).not.toContain("get");
     expect(blobSdk.issueSignedToken.mock.calls[0]?.[0].operations).not.toContain("delete");
+  });
+
+  it("accepts Vercel Function OIDC configuration from BLOB_STORE_ID without a process environment token", async () => {
+    expect(process.env.VERCEL_OIDC_TOKEN).toBeUndefined();
+    expect(sourceWorkbookStorageAvailable()).toBe(true);
+    await expect(getSourceWorkbookStorage().authoriseUpload({
+      storageKey: "source-workbooks/tenant-a/source-a/original.xlsx",
+      contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      maximumSizeInBytes: 20 * 1024 * 1024,
+      validUntil: 2_000
+    })).resolves.toEqual({ uploadUrl: "https://vercel.com/api/blob?signed" });
+  });
+
+  it("retains the legacy token fallback and fails cleanly when neither supported configuration exists", () => {
+    delete process.env.BLOB_STORE_ID;
+    process.env.BLOB_READ_WRITE_TOKEN = "legacy-token-not-logged";
+    expect(sourceWorkbookStorageConfiguration()).toBe("legacy-token");
+    expect(sourceWorkbookStorageAvailable()).toBe(true);
+
+    delete process.env.BLOB_READ_WRITE_TOKEN;
+    expect(sourceWorkbookStorageConfiguration()).toBe("missing");
+    expect(sourceWorkbookStorageAvailable()).toBe(false);
+    expect(() => getSourceWorkbookStorage()).toThrow("not configured");
   });
 
   it("verifies private metadata and supports an explicit CDN bypass for immediate finalisation reads", async () => {

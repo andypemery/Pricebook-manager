@@ -14,6 +14,8 @@ import {
   SelectedWorksheetSummary,
   WorksheetTabs,
   countWorksheetIssues,
+  worksheetRowValidationDescription,
+  worksheetRowValidationStates,
   worksheetPreviewPanelId,
   worksheetTabId
 } from "@/components/data-mapper/workbook-explorer-ui";
@@ -25,6 +27,8 @@ type SortState = {
   columnIndex: number;
   direction: SortDirection;
 } | null;
+
+type PreviewDataRow = { cells: string[]; physicalRowNumber: number };
 
 type ValidationFilters = {
   severity: "All" | ValidationSeverity;
@@ -57,14 +61,18 @@ function formatDateTime(value: string) {
 function visibleRows(preview: WorksheetPreview | null, searchTerm: string, sort: SortState) {
   if (!preview) return [];
   const normalisedSearch = searchTerm.trim().toLowerCase();
+  const dataRows: PreviewDataRow[] = preview.rows.map((cells, index) => ({
+    cells,
+    physicalRowNumber: (preview.headerRowNumber ?? 0) + index + 1
+  }));
   const filteredRows = normalisedSearch
-    ? preview.rows.filter((row) => row.some((cell) => cell.toLowerCase().includes(normalisedSearch)))
-    : [...preview.rows];
+    ? dataRows.filter((row) => row.cells.some((cell) => cell.toLowerCase().includes(normalisedSearch)))
+    : dataRows;
 
   if (!sort) return filteredRows;
   return filteredRows.sort((left, right) => {
-    const leftValue = left[sort.columnIndex] ?? "";
-    const rightValue = right[sort.columnIndex] ?? "";
+    const leftValue = left.cells[sort.columnIndex] ?? "";
+    const rightValue = right.cells[sort.columnIndex] ?? "";
     const comparison = leftValue.localeCompare(rightValue, undefined, { numeric: true, sensitivity: "base" });
     return sort.direction === "asc" ? comparison : -comparison;
   });
@@ -100,6 +108,7 @@ export function WorkbookImporter({ canPrepareOutputProfiles }: { canPrepareOutpu
   }, [selectedWorksheet, workbook]);
   const rows = useMemo(() => visibleRows(preview, searchTerm, sort), [preview, searchTerm, sort]);
   const issueCountsByWorksheet = useMemo(() => countWorksheetIssues(validation?.issues ?? []), [validation]);
+  const rowValidationStates = useMemo(() => worksheetRowValidationStates(validation?.issues ?? [], selectedWorksheetName ?? ""), [validation, selectedWorksheetName]);
   const filteredIssues = useMemo(() => {
     if (!validation) return [];
     return validation.issues.filter((issue) => {
@@ -302,6 +311,12 @@ export function WorkbookImporter({ canPrepareOutputProfiles }: { canPrepareOutpu
               onSelectWorksheet={selectWorksheet}
             />
 
+            <div className="worksheetRowLegend" aria-label="Worksheet validation row legend">
+              <span className="worksheetRowLegendItem rowError"><span aria-hidden="true" />Error</span>
+              <span className="worksheetRowLegendItem rowWarning"><span aria-hidden="true" />Warning</span>
+              <span className="worksheetRowLegendItem rowIgnoredError"><span aria-hidden="true" />Ignored error</span>
+            </div>
+
             <div
               aria-labelledby={worksheetTabId(Math.max(0, summary.worksheets.findIndex((worksheet) => worksheet.name === selectedWorksheetName)))}
               className="worksheetPreviewPanel"
@@ -333,13 +348,20 @@ export function WorkbookImporter({ canPrepareOutputProfiles }: { canPrepareOutpu
                       </tr>
                     </thead>
                     <tbody>
-                      {rows.map((row, rowIndex) => (
-                        <tr key={`${selectedWorksheetName}-${rowIndex}`}>
+                      {rows.map((row) => {
+                        const rowState = rowValidationStates.get(row.physicalRowNumber) ?? "normal";
+                        const rowDescription = worksheetRowValidationDescription(rowState);
+                        return (
+                        <tr aria-label={`${rowDescription}, worksheet row ${row.physicalRowNumber}`} className={rowState === "normal" ? undefined : `worksheetDataRow ${rowState}`} key={`${selectedWorksheetName}-${row.physicalRowNumber}`}>
                           {preview.headers.map((header, columnIndex) => (
-                            <td key={`${header}-${columnIndex}`}>{row[columnIndex]}</td>
+                            <td key={`${header}-${columnIndex}`}>
+                              {columnIndex === 0 && rowState !== "normal" ? <span className="visuallyHidden">{rowDescription}. </span> : null}
+                              {row.cells[columnIndex]}
+                            </td>
                           ))}
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

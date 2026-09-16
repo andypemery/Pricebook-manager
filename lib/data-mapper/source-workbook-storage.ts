@@ -16,29 +16,51 @@ export interface SourceWorkbookStorage {
   delete(storageKey: string): Promise<void>;
 }
 
-function configured() {
-  return Boolean(process.env.BLOB_READ_WRITE_TOKEN || process.env.VERCEL_OIDC_TOKEN && process.env.BLOB_STORE_ID);
+export type SourceWorkbookStorageConfiguration = "oidc" | "legacy-token" | "missing";
+
+export class SourceWorkbookStorageOperationError extends Error {
+  constructor(public readonly operation: "issue-signed-token" | "presign-url", cause: unknown) {
+    super(`Private source-workbook storage ${operation} failed.`, { cause });
+    this.name = "SourceWorkbookStorageOperationError";
+  }
+}
+
+export function sourceWorkbookStorageConfiguration(): SourceWorkbookStorageConfiguration {
+  if (process.env.BLOB_STORE_ID) return "oidc";
+  if (process.env.BLOB_READ_WRITE_TOKEN) return "legacy-token";
+  return "missing";
 }
 
 class VercelBlobSourceWorkbookStorage implements SourceWorkbookStorage {
   async authoriseUpload(input: { storageKey: string; contentType: string; maximumSizeInBytes: number; validUntil: number }) {
-    const token = await issueSignedToken({
-      pathname: input.storageKey,
-      operations: ["put"],
-      allowedContentTypes: [input.contentType],
-      maximumSizeInBytes: input.maximumSizeInBytes,
-      validUntil: input.validUntil
-    });
-    const { presignedUrl } = await presignUrl(token, {
-      access: "private",
-      operation: "put",
-      pathname: input.storageKey,
-      allowedContentTypes: [input.contentType],
-      maximumSizeInBytes: input.maximumSizeInBytes,
-      validUntil: input.validUntil,
-      addRandomSuffix: false,
-      allowOverwrite: false
-    });
+    let token: Awaited<ReturnType<typeof issueSignedToken>>;
+    try {
+      token = await issueSignedToken({
+        pathname: input.storageKey,
+        operations: ["put"],
+        allowedContentTypes: [input.contentType],
+        maximumSizeInBytes: input.maximumSizeInBytes,
+        validUntil: input.validUntil
+      });
+    } catch (error) {
+      throw new SourceWorkbookStorageOperationError("issue-signed-token", error);
+    }
+
+    let presignedUrl: string;
+    try {
+      ({ presignedUrl } = await presignUrl(token, {
+        access: "private",
+        operation: "put",
+        pathname: input.storageKey,
+        allowedContentTypes: [input.contentType],
+        maximumSizeInBytes: input.maximumSizeInBytes,
+        validUntil: input.validUntil,
+        addRandomSuffix: false,
+        allowOverwrite: false
+      }));
+    } catch (error) {
+      throw new SourceWorkbookStorageOperationError("presign-url", error);
+    }
     return { uploadUrl: presignedUrl };
   }
 
@@ -72,11 +94,11 @@ class VercelBlobSourceWorkbookStorage implements SourceWorkbookStorage {
 }
 
 export function sourceWorkbookStorageAvailable() {
-  return configured();
+  return sourceWorkbookStorageConfiguration() !== "missing";
 }
 
 export function getSourceWorkbookStorage(): SourceWorkbookStorage {
-  if (!configured()) {
+  if (!sourceWorkbookStorageAvailable()) {
     throw new Error("Private source-workbook storage is not configured. Connect a private Blob store to this project with OIDC, or configure the legacy BLOB_READ_WRITE_TOKEN fallback.");
   }
   return new VercelBlobSourceWorkbookStorage();

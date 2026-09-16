@@ -5,6 +5,7 @@ import {
   hasSourceWorkbookUploadPermission,
   SourceWorkbookUploadError
 } from "@/lib/data-mapper/source-workbook-upload";
+import { SourceWorkbookStorageOperationError, sourceWorkbookStorageConfiguration } from "@/lib/data-mapper/source-workbook-storage";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -31,7 +32,11 @@ export async function POST(request: Request) {
     return NextResponse.json(authorisation, { status: 201 });
   } catch (error) {
     if (error instanceof SourceWorkbookUploadError) return NextResponse.json({ error: error.message }, { status: 400 });
-    console.error("[Pricebook Manager] Source workbook upload authorisation failed", error instanceof Error ? error.message : error);
+    console.error("[Pricebook Manager] Source workbook upload authorisation failed", {
+      storageConfiguration: sourceWorkbookStorageConfiguration(),
+      stage: error instanceof SourceWorkbookStorageOperationError ? error.operation : "authorisation",
+      errorName: error instanceof Error ? error.name : "unknown"
+    });
     return NextResponse.json({ error: "A secure upload could not be authorised. Please try again." }, { status: 500 });
   }
 }

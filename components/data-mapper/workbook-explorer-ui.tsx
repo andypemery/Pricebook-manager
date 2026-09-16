@@ -8,6 +8,10 @@ export type WorksheetIssueCounts = {
   warningCount: number;
 };
 
+export type WorksheetRowValidationState = "normal" | "warning" | "ignored-error" | "error";
+
+type RowValidationIssue = Pick<ValidationIssue, "worksheetName" | "rowNumber" | "severity"> & { ignored?: boolean };
+
 type CompactWorkbookSummaryProps = {
   fileName: string;
   fileSize: string;
@@ -69,6 +73,27 @@ export function countWorksheetIssues(issues: readonly Pick<ValidationIssue, "wor
   }
 
   return issueCounts;
+}
+
+export function worksheetRowValidationStates(issues: readonly RowValidationIssue[], worksheetName: string) {
+  const states = new Map<number, WorksheetRowValidationState>();
+  const weight: Record<WorksheetRowValidationState, number> = { normal: 0, warning: 1, "ignored-error": 2, error: 3 };
+
+  for (const issue of issues) {
+    if (issue.worksheetName !== worksheetName) continue;
+    const next = issue.severity === "Warning" ? "warning" : issue.ignored ? "ignored-error" : "error";
+    const current = states.get(issue.rowNumber) ?? "normal";
+    if (weight[next] > weight[current]) states.set(issue.rowNumber, next);
+  }
+
+  return states;
+}
+
+export function worksheetRowValidationDescription(state: WorksheetRowValidationState) {
+  if (state === "error") return "Validation error";
+  if (state === "ignored-error") return "Ignored validation error";
+  if (state === "warning") return "Validation warning";
+  return "No validation issue";
 }
 
 export function worksheetTabId(index: number) {

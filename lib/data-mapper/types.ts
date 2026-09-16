@@ -74,6 +74,7 @@ export type WorksheetPreview = {
   worksheetName: string;
   headers: string[];
   rows: string[][];
+  headerRowNumber: number | null;
   sourceRowCount: number;
   previewRowLimit: number;
 };

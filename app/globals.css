@@ -935,6 +935,27 @@ p { line-height: 1.6; }
   cursor: pointer;
 }
 .previewTable tbody tr:hover td { background: rgba(0, 199, 243, 0.04); }
+.worksheetRowLegend { display: flex; gap: 12px; flex-wrap: wrap; margin: 14px 0 0; color: var(--text-muted); font-size: 0.85rem; }
+.worksheetRowLegendItem { align-items: center; display: inline-flex; gap: 6px; }
+.worksheetRowLegendItem > span { border-left: 4px solid; border-radius: 3px; height: 16px; width: 10px; }
+.worksheetRowLegendItem.rowError > span { background: rgba(255, 89, 104, 0.16); border-color: #ff5968; }
+.worksheetRowLegendItem.rowWarning > span { background: rgba(255, 190, 56, 0.16); border-color: #ffbe38; }
+.worksheetRowLegendItem.rowIgnoredError > span { background: rgba(255, 137, 147, 0.1); border-color: #c97982; }
+.previewTable tbody .worksheetDataRow.error td { background: rgba(255, 89, 104, 0.15); }
+.previewTable tbody .worksheetDataRow.warning td { background: rgba(255, 190, 56, 0.15); }
+.previewTable tbody .worksheetDataRow.ignored-error td { background: rgba(255, 137, 147, 0.1); }
+.previewTable tbody .worksheetDataRow.error td:first-child { box-shadow: inset 4px 0 #ff5968; }
+.previewTable tbody .worksheetDataRow.warning td:first-child { box-shadow: inset 4px 0 #ffbe38; }
+.previewTable tbody .worksheetDataRow.ignored-error td:first-child { box-shadow: inset 4px 0 #c97982; }
+.previewTable tbody .worksheetDataRow:hover td { filter: brightness(1.06); }
+.theme-light .previewTable tbody .worksheetDataRow.error td { background: #fff0f1; }
+.theme-light .previewTable tbody .worksheetDataRow.warning td { background: #fff8df; }
+.theme-light .previewTable tbody .worksheetDataRow.ignored-error td { background: #fff5f5; }
+@media (prefers-color-scheme: light) {
+  .theme-system .previewTable tbody .worksheetDataRow.error td { background: #fff0f1; }
+  .theme-system .previewTable tbody .worksheetDataRow.warning td { background: #fff8df; }
+  .theme-system .previewTable tbody .worksheetDataRow.ignored-error td { background: #fff5f5; }
+}
 .validationFilters {
   display: grid;
   grid-template-columns: repeat(3, minmax(160px, 1fr));

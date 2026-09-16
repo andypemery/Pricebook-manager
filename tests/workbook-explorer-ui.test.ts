@@ -8,6 +8,8 @@ import {
   WorksheetTabs,
   countWorksheetIssues,
   nextWorksheetTabIndex,
+  worksheetRowValidationDescription,
+  worksheetRowValidationStates,
   worksheetPreviewRowDescription
 } from "../components/data-mapper/workbook-explorer-ui";
 import type { WorksheetSummary } from "../lib/data-mapper/types";
@@ -102,6 +104,31 @@ describe("Workbook Explorer UI", () => {
     expect(counts.get("Warnings only")).toEqual({ errorCount: 0, warningCount: 1 });
     expect(counts.get("Both")).toEqual({ errorCount: 1, warningCount: 1 });
     expect(counts.has("Clean")).toBe(false);
+  });
+
+  it("derives one accessible row state per physical worksheet row with the required severity precedence", () => {
+    const states = worksheetRowValidationStates([
+      { worksheetName: "Pricebook", rowNumber: 2, severity: "Warning" },
+      { worksheetName: "Pricebook", rowNumber: 3, severity: "Error", ignored: true },
+      { worksheetName: "Pricebook", rowNumber: 4, severity: "Error", ignored: true },
+      { worksheetName: "Pricebook", rowNumber: 4, severity: "Error" },
+      { worksheetName: "Other sheet", rowNumber: 2, severity: "Error" }
+    ], "Pricebook");
+
+    expect(states.get(2)).toBe("warning");
+    expect(states.get(3)).toBe("ignored-error");
+    expect(states.get(4)).toBe("error");
+    expect(states.has(5)).toBe(false);
+    expect(worksheetRowValidationDescription("ignored-error")).toBe("Ignored validation error");
+  });
+
+  it("styles worksheet issue rows with subtle states, an indicator and accessible text", () => {
+    const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+    expect(css).toContain(".worksheetDataRow.error td");
+    expect(css).toContain(".worksheetDataRow.warning td");
+    expect(css).toContain(".worksheetDataRow.ignored-error td");
+    expect(css).toContain(".worksheetRowLegend");
+    expect(css).toContain("box-shadow: inset 4px 0");
   });
 
   it("updates the compact issue summary for the selected worksheet", () => {

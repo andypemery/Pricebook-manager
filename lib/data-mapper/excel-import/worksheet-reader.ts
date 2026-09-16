@@ -65,6 +65,7 @@ export function createWorksheetPreview(name: string, worksheet: ExcelJS.Workshee
       worksheetName: name,
       headers: summary.headers,
       rows: [],
+      headerRowNumber: null,
       sourceRowCount: summary.rowCount,
       previewRowLimit: rowLimit
     };
@@ -76,6 +77,7 @@ export function createWorksheetPreview(name: string, worksheet: ExcelJS.Workshee
     worksheetName: name,
     headers: summary.headers,
     rows: dataRows.map((row) => Array.from({ length: summary.columnCount }, (_, index) => row[index] ?? "")),
+    headerRowNumber: summary.detectedHeaderRow,
     sourceRowCount: summary.rowCount,
     previewRowLimit: rowLimit
   };
