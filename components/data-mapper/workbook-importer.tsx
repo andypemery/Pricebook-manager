@@ -7,6 +7,8 @@ import { ArrowDownUp, FileSpreadsheet, LoaderCircle, Search, Upload } from "luci
 import type { UploadedWorkbookDetails, ValidationIssueCategory, ValidationSeverity, WorkbookSummary, WorkbookValidationResult, WorksheetPreview } from "@/lib/data-mapper/types";
 import { createWorksheetPreview, friendlyExcelImportMessage, readWorkbook } from "@/lib/data-mapper/excel-import";
 import { validateWorkbook } from "@/lib/data-mapper/validation";
+import { uploadSourceWorkbookDirectly } from "@/lib/data-mapper/source-workbook-direct-upload";
+import { SourceWorkbookPolicyError, validateSourceWorkbookDescriptor } from "@/lib/data-mapper/source-workbook-policy";
 import {
   CompactWorkbookSummary,
   SelectedWorksheetSummary,
@@ -85,6 +87,7 @@ export function WorkbookImporter({ canPrepareOutputProfiles }: { canPrepareOutpu
   const [isDragging, setIsDragging] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isPreparingProfile, setIsPreparingProfile] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [profileError, setProfileError] = useState<string | null>(null);
 
@@ -120,6 +123,7 @@ export function WorkbookImporter({ canPrepareOutputProfiles }: { canPrepareOutpu
     setSelectedUploadDetails(currentUploadDetails);
 
     try {
+      validateSourceWorkbookDescriptor({ fileName: file.name, fileSizeBytes: file.size, contentType: file.type });
       await new Promise((resolve) => window.setTimeout(resolve, 0));
       const result = await readWorkbook(file);
       const validationResult = validateWorkbook(result.workbook, result.summary);
@@ -138,7 +142,7 @@ export function WorkbookImporter({ canPrepareOutputProfiles }: { canPrepareOutpu
       setSelectedFile(null);
       setUploadDetails(null);
       setSelectedWorksheetName(null);
-      setError(friendlyExcelImportMessage(importError));
+      setError(importError instanceof SourceWorkbookPolicyError ? importError.message : friendlyExcelImportMessage(importError));
     } finally {
       setIsLoading(false);
       if (inputRef.current) inputRef.current.value = "";
@@ -166,18 +170,15 @@ export function WorkbookImporter({ canPrepareOutputProfiles }: { canPrepareOutpu
   async function prepareOutputProfile() {
     if (!selectedFile || !canPrepareOutputProfiles || isPreparingProfile) return;
     setIsPreparingProfile(true);
+    setUploadProgress(0);
     setProfileError(null);
     try {
-      const formData = new FormData();
-      formData.set("workbook", selectedFile);
-      if (selectedWorksheetName) formData.set("worksheetName", selectedWorksheetName);
-      const response = await fetch("/api/data-mapper/source-imports", { method: "POST", body: formData });
-      const result = await response.json() as { error?: string; mappingUrl?: string };
-      if (!response.ok || !result.mappingUrl) throw new Error(result.error || "The workbook could not be prepared for an Output Profile.");
+      const result = await uploadSourceWorkbookDirectly(selectedFile, { worksheetName: selectedWorksheetName, onProgress: setUploadProgress });
       router.push(result.mappingUrl);
     } catch (profilePreparationError) {
       setProfileError(profilePreparationError instanceof Error ? profilePreparationError.message : "The workbook could not be prepared for an Output Profile.");
       setIsPreparingProfile(false);
+      setUploadProgress(null);
     }
   }
 
@@ -423,6 +424,7 @@ export function WorkbookImporter({ canPrepareOutputProfiles }: { canPrepareOutpu
               warningCount={validation.summary.totalWarnings}
               canContinue={canPrepareOutputProfiles}
               isPreparing={isPreparingProfile}
+              uploadProgress={uploadProgress}
               onUploadCorrected={() => inputRef.current?.click()}
               onContinue={prepareOutputProfile}
             />

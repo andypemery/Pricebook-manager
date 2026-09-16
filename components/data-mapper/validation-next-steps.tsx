@@ -5,6 +5,7 @@ export function ValidationNextSteps({
   warningCount,
   canContinue,
   isPreparing,
+  uploadProgress,
   onUploadCorrected,
   onContinue
 }: {
@@ -12,6 +13,7 @@ export function ValidationNextSteps({
   warningCount: number;
   canContinue: boolean;
   isPreparing: boolean;
+  uploadProgress?: number | null;
   onUploadCorrected: () => void;
   onContinue: () => void;
 }) {
@@ -40,7 +42,7 @@ export function ValidationNextSteps({
         </button>
         {canContinue ? (
           <button className="primary" type="button" onClick={onContinue} disabled={isPreparing}>
-            <Columns3 aria-hidden="true" size={18} /> {isPreparing ? "Preparing profile" : "Continue to Output Profile"}
+            <Columns3 aria-hidden="true" size={18} /> {isPreparing ? `Uploading… ${uploadProgress ?? 0}%` : "Continue to Output Profile"}
           </button>
         ) : null}
       </div>
