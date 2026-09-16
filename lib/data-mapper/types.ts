@@ -89,6 +89,7 @@ export type ValidationIssueCategory =
 
 export type ValidationIssue = {
   id: string;
+  fingerprint: string;
   severity: ValidationSeverity;
   category: ValidationIssueCategory;
   worksheetName: string;

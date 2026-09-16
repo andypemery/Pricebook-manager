@@ -92,9 +92,22 @@ function issue(
 ): ValidationIssue {
   return {
     id: `${params.worksheetName}-${params.rowNumber}-${params.field}-${index}`,
+    fingerprint: validationIssueFingerprint({ ...params, currentValue: params.currentValue ?? null }),
     ...params,
     currentValue: params.currentValue ?? null
   };
+}
+
+// Versioned identity deliberately excludes display text. It is recalculated from
+// the current workbook every time an override is read or written.
+export function validationIssueFingerprint(input: Pick<ValidationIssue, "worksheetName" | "rowNumber" | "field" | "category" | "severity" | "currentValue">) {
+  const value = ["v1", input.worksheetName, input.rowNumber, input.field, input.category, input.severity, input.currentValue ?? ""].join("\u001f");
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `v1-${(hash >>> 0).toString(16).padStart(8, "0")}`;
 }
 
 function validateWorksheet(

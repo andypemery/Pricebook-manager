@@ -166,6 +166,7 @@ model Tenant {
   usageSnapshots        UsageSnapshot[]
   sourceWorkbookImports SourceWorkbookImport[]
   outputProfiles        OutputProfile[]
+  validationIssueOverrides ValidationIssueOverride[]
 
   @@index([status])
 }
@@ -206,6 +207,7 @@ model User {
   sourceWorkbookImportsCreated SourceWorkbookImport[]         @relation("SourceWorkbookImportCreator")
   outputProfilesCreated        OutputProfile[]                @relation("OutputProfileCreator")
   outputProfilesUpdated        OutputProfile[]                @relation("OutputProfileUpdater")
+  ignoredValidationIssues      ValidationIssueOverride[]      @relation("ValidationIssueOverrideActor")
 
   @@index([tenantId])
   @@index([role])
@@ -694,9 +696,28 @@ model SourceWorkbookImport {
 
   worksheets     SourceWorksheet[]
   outputProfiles OutputProfile[]
+  validationIssueOverrides ValidationIssueOverride[]
 
   @@index([tenantId, createdAt])
   @@index([fileReferenceId])
+}
+
+// Sparse, tenant-scoped acknowledgements only. Validation results remain derived
+// from the private source workbook so a changed workbook cannot inherit an old ignore.
+model ValidationIssueOverride {
+  id                     String               @id @default(cuid())
+  tenantId               String
+  tenant                 Tenant               @relation(fields: [tenantId], references: [id])
+  sourceWorkbookImportId String
+  sourceWorkbookImport   SourceWorkbookImport @relation(fields: [sourceWorkbookImportId], references: [id], onDelete: Cascade)
+  issueFingerprint       String
+  ignoredById            String
+  ignoredBy              User                 @relation("ValidationIssueOverrideActor", fields: [ignoredById], references: [id])
+  ignoredAt              DateTime             @default(now())
+
+  @@unique([sourceWorkbookImportId, issueFingerprint])
+  @@index([tenantId, sourceWorkbookImportId])
+  @@index([ignoredById])
 }
 
 model SourceWorksheet {

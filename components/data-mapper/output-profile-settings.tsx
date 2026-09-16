@@ -73,7 +73,7 @@ export function OutputProfileSettings({
         <div>
           <p className="sheetLabel">Output settings</p>
           <h2 id="output-settings-title">Filename and file type</h2>
-          <p className="muted">Configure the reusable definition now; file generation will be added later.</p>
+          <p className="muted">Configure the reusable definition and generate a CSV or XLSX file when it is ready.</p>
         </div>
         <span className={attentionIssues.length === 0 ? "badge success" : "badge warning"}>
           {attentionIssues.length === 0 ? "Ready" : "Needs attention"}

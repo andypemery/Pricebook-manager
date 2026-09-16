@@ -65,7 +65,7 @@ describe("Output Profile rule validation", () => {
   });
 
   it("rejects invalid rounding and negative business percentages", () => {
-    expect(() => validateOutputProfileInput(input({ columns: [sourceColumn({ roundingDecimalPlaces: 5 })] }), ["Product Code", "List Price"])).toThrow("Rounding must be between 0 and 4 decimal places.");
+    expect(() => validateOutputProfileInput(input({ columns: [sourceColumn({ roundingDecimalPlaces: 7 as never })] }), ["Product Code", "List Price"])).toThrow("Rounding must be between 0 and 6 decimal places.");
     expect(() => validateOutputProfileInput(input({ columns: [sourceColumn({ adjustmentType: "PERCENT_DECREASE", adjustmentValue: "-18" })] }), ["Product Code", "List Price"])).toThrow("Percentage adjustments cannot be negative.");
   });
 

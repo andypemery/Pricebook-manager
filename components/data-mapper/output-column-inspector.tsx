@@ -3,7 +3,7 @@
 import { adjustmentLabels } from "@/lib/data-mapper/output-profiles/rules";
 import { adjustmentTypes, type OutputProfileColumnDraft, type RoundingDecimalPlaces } from "@/lib/data-mapper/output-profiles/types";
 
-const roundingOptions = [0, 1, 2, 3, 4] as const;
+const roundingOptions = [0, 1, 2, 3, 4, 5, 6] as const;
 
 function adjustmentValueLabel(adjustmentType: OutputProfileColumnDraft["adjustmentType"]) {
   if (adjustmentType === "MULTIPLY") return "Multiplier";
@@ -35,7 +35,7 @@ export function OutputColumnInspector({ column, canEdit, onChange }: {
           </>
         ) : (
           <>
-            <div className="sourceHeadingReference"><span>Original source heading</span><strong>{column.sourceHeading}</strong></div>
+            <div className="sourceHeadingReference"><span>Source heading</span><strong>{column.sourceHeading}</strong></div>
             <label className="field">
               <span>Value adjustment</span>
               <select value={column.adjustmentType} disabled={!canEdit} onChange={(event) => onChange({ adjustmentType: event.target.value as OutputProfileColumnDraft["adjustmentType"], adjustmentValue: "" })}>

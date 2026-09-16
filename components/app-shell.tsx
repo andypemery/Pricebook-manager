@@ -70,7 +70,7 @@ export function AppShell({
           <Image src={smallLogoPath} alt="Axiom" width={42} height={42} />
           <span><strong>{brandingConfig.appDisplayName}</strong></span>
         </Link>
-        <Link href="/account" className="sidebarIdentity" title={`${userName} — ${accountDetails}`} aria-label={`Signed in as ${userName}, ${accountDetails}`} onClick={() => setMobileOpen(false)}>
+        <Link href="/settings#account" className="sidebarIdentity" title={`${userName} — ${accountDetails}`} aria-label={`Signed in as ${userName}, ${accountDetails}`} onClick={() => setMobileOpen(false)}>
           <span className="sidebarAvatar" aria-hidden="true">{user.firstName.charAt(0)}{user.surname.charAt(0)}</span>
           <span className="sidebarIdentityText"><strong>{userName}</strong><small>{accountDetails}</small></span>
           <span className="navTooltip" role="tooltip">{userName} — {accountDetails}</span>

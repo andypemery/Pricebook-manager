@@ -35,6 +35,8 @@ describe("shared Output Profile rule engine", () => {
     expect(["100.00", "250.00", "79.99"].map((value) => transformNumericValue(value, "MULTIPLY", "0.82", 2)))
       .toEqual(["82.00", "205.00", "65.59"]);
     expect(transformNumericValue("1.005", "NONE", "", 2)).toBe("1.01");
+    expect(transformNumericValue("0.00432178", "NONE", "", 5)).toBe("0.00432");
+    expect(transformNumericValue("0.00432178", "MULTIPLY", "1.1", 6)).toBe("0.004754");
   });
 
   it("applies percentage increase, percentage decrease and division", () => {

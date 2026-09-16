@@ -195,10 +195,10 @@ export function outputValueForColumn(column: OutputProfileColumnDraft, sourceRow
 export function describeColumnRule(column: OutputProfileColumnDraft) {
   if (column.columnType === "STATIC") return `Fixed value: ${column.staticValue || "blank"}`;
   const parts: string[] = [];
-  if (column.adjustmentType === "MULTIPLY") parts.push(`× ${column.adjustmentValue || "…"}`);
-  if (column.adjustmentType === "DIVIDE") parts.push(`÷ ${column.adjustmentValue || "…"}`);
-  if (column.adjustmentType === "PERCENT_INCREASE") parts.push(`Increase ${column.adjustmentValue || "…"}%`);
-  if (column.adjustmentType === "PERCENT_DECREASE") parts.push(`Decrease ${column.adjustmentValue || "…"}%`);
+  if (column.adjustmentType === "MULTIPLY") parts.push(`Multiply by ${column.adjustmentValue || "value required"}`);
+  if (column.adjustmentType === "DIVIDE") parts.push(`Divide by ${column.adjustmentValue || "value required"}`);
+  if (column.adjustmentType === "PERCENT_INCREASE") parts.push(`Increase ${column.adjustmentValue || "value required"}%`);
+  if (column.adjustmentType === "PERCENT_DECREASE") parts.push(`Decrease ${column.adjustmentValue || "value required"}%`);
   if (column.roundingDecimalPlaces !== null) parts.push(`Round to ${column.roundingDecimalPlaces} dp`);
   return parts.join(" · ");
 }

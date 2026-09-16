@@ -18,7 +18,6 @@ import {
   Settings,
   ShieldAlert,
   ShieldCheck,
-  UserCog,
   UsersRound
 } from "lucide-react";
 import type { PermissionKey } from "@/config/permissions.config";
@@ -46,7 +45,6 @@ export const navigationItems: NavigationItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, scope: "all" },
   { href: "/workbook", label: "Workbook", icon: FileSpreadsheet, scope: "all" },
   { href: "/mapping", label: "Output Profiles", icon: Columns3, scope: "all" },
-  { href: "/account", label: "Account", icon: UserCog, scope: "all" },
   { href: "/settings", label: "Settings", icon: Settings, scope: "all" }
 ];
 

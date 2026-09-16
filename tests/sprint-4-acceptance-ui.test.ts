@@ -34,11 +34,11 @@ describe("Sprint 4 acceptance navigation and resume workflow", () => {
       ["Dashboard", "/dashboard"],
       ["Workbook", "/workbook"],
       ["Output Profiles", "/mapping"],
-      ["Account", "/account"],
       ["Settings", "/settings"]
     ]);
     expect(navigationItems.map((item) => item.label)).not.toContain("Projects");
     expect(navigationItems.map((item) => item.label)).not.toContain("Demo Records");
+    expect(navigationItems.map((item) => item.label)).not.toContain("Account");
     for (const item of navigationItems) {
       const route = item.href === "/dashboard" ? "dashboard" : item.href.slice(1);
       expect(existsSync(new URL(`../app/(app)/${route}/page.tsx`, import.meta.url))).toBe(true);
@@ -96,6 +96,26 @@ describe("Sprint 4 acceptance navigation and resume workflow", () => {
     expect(css).toMatch(/\.outputProfileWorkspaceGrid\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/s);
     expect(css).toMatch(/\.workspaceFilename[^}]*overflow-wrap:\s*anywhere/s);
     expect(css).toMatch(/\.sourceWorksheetChoices\s*\{[^}]*repeat\(auto-fit/s);
+  });
+});
+
+describe("Sprint 4 direct output and Account cleanup", () => {
+  it("keeps only the compact structural heading controls and removes legacy ellipsis text", () => {
+    const builder = readFileSync(new URL("../components/data-mapper/output-profile-builder.tsx", import.meta.url), "utf8");
+    const rules = readFileSync(new URL("../lib/data-mapper/output-profiles/rules.ts", import.meta.url), "utf8");
+    expect(builder).toContain('aria-label="Move left"');
+    expect(builder).toContain('aria-label="Move right"');
+    expect(builder).toContain('aria-label="Delete column"');
+    expect(rules).not.toContain('"…"');
+  });
+
+  it("moves Account into Settings and preserves a safe compatibility redirect", () => {
+    const settings = readFileSync(new URL("../app/(app)/settings/page.tsx", import.meta.url), "utf8");
+    const account = readFileSync(new URL("../app/(app)/account/page.tsx", import.meta.url), "utf8");
+    expect(settings).toContain('id="account"');
+    expect(settings).toContain("Appearance");
+    expect(settings).toContain("Role Templates");
+    expect(account).toContain('redirect("/settings#account")');
   });
 });
 

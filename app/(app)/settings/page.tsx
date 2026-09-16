@@ -4,6 +4,7 @@ import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import { canShowNavigationItem, settingsNavigationGroups } from "@/config/navigation.config";
 import { brandingStatus, getTenantBranding } from "@/lib/branding";
+import { hasPermission } from "@/lib/permissions";
 
 export default async function SettingsPage() {
   const user = await requireUser();
@@ -45,6 +46,15 @@ export default async function SettingsPage() {
           </div>
         </section>
       ))}
+
+      <section className="card" id="account">
+        <div className="sectionHeader"><div><h2>Account</h2><p className="muted">Manage your own account preferences and the account administration controls available to your role.</p></div></div>
+        <div className="grid">
+          <Link className="settingsTile" href="/account/appearance"><span className="tileContent"><span className="tileTitle">Appearance</span><span className="muted">Choose dark, light or system mode for your own account.</span></span></Link>
+          {hasPermission(user, "manageCustomerUsers") ? <Link className="settingsTile" href="/account/role-templates"><span className="tileContent"><span className="tileTitle">Role Templates</span><span className="muted">Set the permitted customer-level capabilities behind standard roles.</span></span></Link> : null}
+          {hasPermission(user, "manageCustomerSettings") ? <Link className="settingsTile" href="/account/email-settings"><span className="tileContent"><span className="tileTitle">Email Settings</span><span className="muted">Manage provider connections, notifications and sending profiles.</span></span></Link> : null}
+        </div>
+      </section>
 
       {visibleGroups.length === 0 ? (
         <section className="card">

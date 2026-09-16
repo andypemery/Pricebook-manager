@@ -66,7 +66,7 @@ describe("Sprint 4 output-heading controls", () => {
     expect(markup).toMatch(/<button[^>]*disabled[^>]*aria-label="Move right"/);
     expect(markup).not.toContain("Remove column");
     expect(markup).not.toContain("outputColumnActions");
-    expect(markup).not.toContain("…");
+    expect(markup).not.toContain("× …");
     expect(markup).toContain("Current Output Profile context");
     expect(markup).toContain("Supplier.xlsx");
     expect(markup).toContain("Products");
@@ -128,7 +128,8 @@ describe("Sprint 4 output-heading controls", () => {
     }));
 
     expect(markup).toContain("Output heading");
-    expect(markup).toContain("Original source heading");
+    expect(markup).toContain("Source heading");
+    expect(markup).not.toContain("Original source heading");
     expect(markup).toContain("Value adjustment");
     expect(markup).toContain("Value");
     expect(markup).toContain("Rounding");

@@ -6,7 +6,7 @@ export type OutputColumnType = (typeof outputColumnTypes)[number];
 export const adjustmentTypes = ["NONE", "MULTIPLY", "DIVIDE", "PERCENT_INCREASE", "PERCENT_DECREASE"] as const;
 export type OutputValueAdjustmentType = (typeof adjustmentTypes)[number];
 
-export type RoundingDecimalPlaces = 0 | 1 | 2 | 3 | 4 | null;
+export type RoundingDecimalPlaces = 0 | 1 | 2 | 3 | 4 | 5 | 6 | null;
 
 export const filterMatchModes = ["ALL", "ANY"] as const;
 export type OutputProfileFilterMatchMode = (typeof filterMatchModes)[number];

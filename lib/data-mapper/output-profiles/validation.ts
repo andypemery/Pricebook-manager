@@ -54,10 +54,10 @@ function canonicalSourceReference(sourceColumnIndex: unknown, sourceHeading: unk
 
 function validateRounding(value: unknown) {
   if (value === null) return null;
-  if (!Number.isInteger(value) || (value as number) < 0 || (value as number) > 4) {
-    throw new OutputProfileValidationError("Rounding must be between 0 and 4 decimal places.");
+  if (!Number.isInteger(value) || (value as number) < 0 || (value as number) > 6) {
+    throw new OutputProfileValidationError("Rounding must be between 0 and 6 decimal places.");
   }
-  return value as 0 | 1 | 2 | 3 | 4;
+  return value as 0 | 1 | 2 | 3 | 4 | 5 | 6;
 }
 
 function persistedDecimal(value: string, label: string) {

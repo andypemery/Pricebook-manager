@@ -8,6 +8,7 @@ import { OutputColumnInspector } from "@/components/data-mapper/output-column-in
 import { OutputProfileFilters } from "@/components/data-mapper/output-profile-filters";
 import { OutputProfileManager } from "@/components/data-mapper/output-profile-manager";
 import { OutputProfileSettings } from "@/components/data-mapper/output-profile-settings";
+import { OutputGenerationPanel } from "@/components/data-mapper/output-generation-panel";
 import { useUnsavedProfileProtection } from "@/components/data-mapper/use-unsaved-profile-protection";
 import { saveOutputProfileAction } from "@/lib/actions/output-profile.actions";
 import { manuallyResolveProfileField } from "@/lib/data-mapper/output-profiles/compatibility";
@@ -430,6 +431,7 @@ export function OutputProfileBuilder({ source, initialDraft, profiles, initialAp
         onChange={(changes) => { setDraft((current) => ({ ...current, ...changes })); resetSaveState(); }}
         onFilenameDateChange={setFilenameDate}
       />
+      <OutputGenerationPanel sourceWorkbookImportId={source.sourceWorkbookImportId} draft={draft} filenameDate={filenameDate} canEdit={canEdit && !isSaving} />
     </section>
   );
 }
