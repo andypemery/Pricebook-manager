@@ -52,6 +52,13 @@ describe("Sprint 4 acceptance navigation and resume workflow", () => {
     expect(sidebarClassName(true, false)).toBe("sidebar open");
   });
 
+  it("keeps the sidebar toggle above content without clipping it", () => {
+    const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+    expect(css).toMatch(/\.sidebar\s*\{[^}]*z-index:\s*40;[^}]*overflow:\s*visible;/s);
+    expect(css).toMatch(/\.sidebarToggle\s*\{[^}]*z-index:\s*90;/s);
+    expect(css).toMatch(/\.sidebarNav\s*\{[^}]*overflow-y:\s*auto;/s);
+  });
+
   it("renders tenant-scoped resume links and keeps long workbook names inside stacked cards", () => {
     const longName = "Axiom_Data_Mapper_Demo_Pricebook_20000_Rows_exceljs (2).xlsx";
     const worksheetNames = ["HP Print", "Canon Print", "Epson Print", "Lenovo Devices", "Dell Devices", "Accessories", "Managed Services", "Software Licences"];
@@ -148,6 +155,9 @@ describe("Sprint 4 acceptance filter and output settings UI", () => {
     }));
 
     expect(csvMarkup).toContain("Filename date");
+    expect(csvMarkup).toContain('type="date"');
+    expect(csvMarkup).toContain('aria-label="Choose filename date"');
+    expect(csvMarkup).toContain("datePickerButton");
     expect(csvMarkup).toContain("NHS_October_2026.csv");
     expect(csvMarkup).toContain("{month}");
     expect(csvMarkup).toContain('<option value="CSV" selected="">CSV</option>');
@@ -156,5 +166,20 @@ describe("Sprint 4 acceptance filter and output settings UI", () => {
     expect(xlsxMarkup).toContain("Worksheet name (optional)");
     expect(xlsxMarkup).toContain("The tab name inside the Excel workbook");
     expect(xlsxMarkup).not.toContain("Effective preview date");
+  });
+});
+
+describe("Sprint 4 current Output Profile page cleanup", () => {
+  it("keeps Validated Sources on Dashboard and removes source libraries from the current editor", () => {
+    const mappingPage = readFileSync(new URL("../app/(app)/mapping/page.tsx", import.meta.url), "utf8");
+    const dashboardPage = readFileSync(new URL("../app/(app)/dashboard/page.tsx", import.meta.url), "utf8");
+    const workspace = readFileSync(new URL("../components/data-mapper/output-profile-workspace.tsx", import.meta.url), "utf8");
+
+    expect(mappingPage).not.toContain("OutputProfileWorkspace");
+    expect(mappingPage).not.toContain("Validated Sources");
+    expect(mappingPage).toContain("Choose a workbook to build or apply an Output Profile");
+    expect(dashboardPage).toContain("OutputProfileWorkspace");
+    expect(workspace).toContain("Validated Sources");
+    expect(workspace).toContain("worksheetResumeHref");
   });
 });

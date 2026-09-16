@@ -1,6 +1,7 @@
 "use client";
 
-import { Fragment, useMemo, useRef, useState, useTransition, type DragEvent } from "react";
+import Link from "next/link";
+import { useMemo, useRef, useState, useTransition, type DragEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Check, ChevronLeft, ChevronRight, GripVertical, Plus, Save, X } from "lucide-react";
 import { OutputColumnInspector } from "@/components/data-mapper/output-column-inspector";
@@ -9,6 +10,7 @@ import { OutputProfileManager } from "@/components/data-mapper/output-profile-ma
 import { OutputProfileSettings } from "@/components/data-mapper/output-profile-settings";
 import { useUnsavedProfileProtection } from "@/components/data-mapper/use-unsaved-profile-protection";
 import { saveOutputProfileAction } from "@/lib/actions/output-profile.actions";
+import { manuallyResolveProfileField } from "@/lib/data-mapper/output-profiles/compatibility";
 import {
   outputProfileDraftFingerprint,
   outputProfileHasUnsavedChanges,
@@ -28,7 +30,13 @@ import {
   updateOutputColumn
 } from "@/lib/data-mapper/output-profiles/profile-state";
 import { buildOutputPreview, describeColumnRule } from "@/lib/data-mapper/output-profiles/rules";
-import type { OutputProfileColumnDraft, OutputProfileDraft, OutputProfileSummary, SourceWorksheetPreview } from "@/lib/data-mapper/output-profiles/types";
+import type {
+  AppliedOutputProfileContext,
+  OutputProfileColumnDraft,
+  OutputProfileDraft,
+  OutputProfileSummary,
+  SourceWorksheetPreview
+} from "@/lib/data-mapper/output-profiles/types";
 
 const sourceDragType = "application/x-pricebook-source-column";
 const outputDragType = "application/x-pricebook-output-column";
@@ -37,16 +45,33 @@ function newClientId() {
   return crypto.randomUUID();
 }
 
-export function OutputProfileBuilder({ source, initialDraft, profiles, initialEffectiveDate, canEdit }: {
+export function outputHeadingInsertionClassName(
+  selected: boolean,
+  customised: boolean,
+  insertionIndex: number | null,
+  columnIndex: number,
+  columnCount: number
+) {
+  const classes = ["outputHeadingCell"];
+  if (selected) classes.push("selected");
+  if (customised) classes.push("customised");
+  if (insertionIndex === columnIndex) classes.push("insertionBefore");
+  if (insertionIndex === columnCount && columnIndex === columnCount - 1) classes.push("insertionAfter");
+  return classes.join(" ");
+}
+
+export function OutputProfileBuilder({ source, initialDraft, profiles, initialApplication, initialEffectiveDate, canEdit }: {
   source: SourceWorksheetPreview;
   initialDraft: OutputProfileDraft;
   profiles: OutputProfileSummary[];
+  initialApplication?: AppliedOutputProfileContext | null;
   initialEffectiveDate: string;
   canEdit: boolean;
 }) {
   const router = useRouter();
   const profileNameInput = useRef<HTMLInputElement>(null);
   const [draft, setDraft] = useState(initialDraft);
+  const [application, setApplication] = useState(initialApplication ?? null);
   const [savedFingerprint, setSavedFingerprint] = useState(() => outputProfileDraftFingerprint(initialDraft));
   const [filenameDate, setFilenameDate] = useState(initialEffectiveDate);
   const [dragState, setDragState] = useState<{ kind: "source" } | { kind: "output"; clientId: string } | null>(null);
@@ -66,6 +91,7 @@ export function OutputProfileBuilder({ source, initialDraft, profiles, initialEf
   const selectedColumnIndex = draft.columns.findIndex((column) => column.clientId === selectedColumnId);
   const selectedColumn = selectedColumnIndex >= 0 ? draft.columns[selectedColumnIndex] : null;
   const isDragging = dragState !== null;
+  const unresolvedCompatibilityFields = application?.fields.filter((field) => field.sourceColumnIndex === null) ?? [];
 
   function resetSaveState() {
     setMessage(null);
@@ -162,6 +188,7 @@ export function OutputProfileBuilder({ source, initialDraft, profiles, initialEf
       }
       setSavedFingerprint(submittedFingerprint);
       setDraft((current) => ({ ...current, id: result.profileId }));
+      setApplication(null);
       setMessage(result.message);
       router.replace(`/mapping?profile=${encodeURIComponent(result.profileId)}`);
       router.refresh();
@@ -174,11 +201,20 @@ export function OutputProfileBuilder({ source, initialDraft, profiles, initialEf
     resetSaveState();
   }
 
+  function resolveCompatibilityField(fieldKey: string, sourceColumnIndex: number) {
+    if (!application) return;
+    const resolved = manuallyResolveProfileField({ draft, application, fieldKey, sourceColumnIndex, currentHeaders: source.headers });
+    setDraft(resolved.draft);
+    setApplication(resolved.application);
+    resetSaveState();
+  }
+
   return (
     <section className="outputProfileBuilder" aria-label="Output Profile Builder">
       <OutputProfileManager
         profiles={profiles}
         activeProfileId={draft.id}
+        appliedProfileId={application?.profileId ?? null}
         sourceWorkbookImportId={draft.sourceWorkbookImportId}
         sourceWorksheetId={draft.sourceWorksheetId}
         currentProfileName={draft.name}
@@ -187,6 +223,52 @@ export function OutputProfileBuilder({ source, initialDraft, profiles, initialEf
         isBusy={isSaving}
         onRename={() => { profileNameInput.current?.focus(); profileNameInput.current?.select(); }}
       />
+
+      <section className="card outputProfileContext" aria-label="Current Output Profile context">
+        <div><span>Source</span><strong>{source.workbookFileName}</strong></div>
+        <div><span>Worksheet</span><strong>{source.worksheetName}</strong></div>
+        <div><span>Profile</span><strong>{application?.profileName ?? (draft.name.trim() || "New Output Profile")}</strong></div>
+        <div className="outputProfileContextActions">
+          <Link className="secondary" href="/dashboard">Back to Dashboard</Link>
+          <Link className="secondary" href="/workbook">Workbook Explorer</Link>
+        </div>
+      </section>
+
+      {application ? (
+        <section className="card profileCompatibility" aria-labelledby="profile-compatibility-title">
+          <div className="sectionHeader">
+            <div>
+              <p className="sheetLabel">Applied saved profile</p>
+              <h2 id="profile-compatibility-title">{application.profileName}</h2>
+              <p className="muted">Originally created from {application.originWorkbookFileName} · {application.originWorksheetName}. The saved profile remains unchanged.</p>
+            </div>
+            <span className={unresolvedCompatibilityFields.length === 0 ? "badge success" : "badge warning"}>
+              {unresolvedCompatibilityFields.length === 0 ? "Compatible" : "Needs attention"}
+            </span>
+          </div>
+          <p className="profileCompatibilitySummary">
+            {unresolvedCompatibilityFields.length === 0
+              ? `All ${application.requiredFieldCount} required source ${application.requiredFieldCount === 1 ? "field was" : "fields were"} found.`
+              : `${application.matchedFieldCount} of ${application.requiredFieldCount} source fields matched automatically. ${unresolvedCompatibilityFields.length} ${unresolvedCompatibilityFields.length === 1 ? "needs" : "need"} your attention.`}
+          </p>
+          {unresolvedCompatibilityFields.length > 0 ? (
+            <div className="profileCompatibilityFields">
+              {unresolvedCompatibilityFields.map((field) => (
+                <label className="field profileCompatibilityField" key={field.key}>
+                  <span>Expected by profile: {field.expectedHeading}</span>
+                  <small>{field.status === "AMBIGUOUS" ? "More than one current heading matches. Choose the intended occurrence." : "No exact current heading was found. Choose a source column explicitly."}</small>
+                  <select value="" onChange={(event) => {
+                    if (event.target.value !== "") resolveCompatibilityField(field.key, Number(event.target.value));
+                  }} disabled={!canInteract}>
+                    <option value="">Choose current source column</option>
+                    {source.headers.map((heading, index) => <option value={index} key={`${heading}-${index}`}>Column {index + 1} · {heading}</option>)}
+                  </select>
+                </label>
+              ))}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
 
       <div className="card outputProfileIdentity">
         <label className="field">
@@ -198,8 +280,8 @@ export function OutputProfileBuilder({ source, initialDraft, profiles, initialEf
           {message ? <span className="success" role="status">{message}</span> : null}
           {error ? <span className="error" role="alert">{error}</span> : null}
           {canEdit ? (
-            <button className="primary" type="button" onClick={saveProfile} disabled={isSaving || (draft.id !== null && !isDirty)}>
-              <Save aria-hidden="true" size={18} /> {isSaving ? "Saving" : draft.id ? "Save changes" : "Save draft"}
+            <button className="primary" type="button" onClick={saveProfile} disabled={isSaving || ((draft.id !== null || application !== null) && !isDirty)}>
+              <Save aria-hidden="true" size={18} /> {isSaving ? "Saving" : draft.id ? "Save changes" : application ? "Save as new profile" : "Save draft"}
             </button>
           ) : <span className="badge">Read-only access</span>}
         </div>
@@ -266,14 +348,7 @@ export function OutputProfileBuilder({ source, initialDraft, profiles, initialEf
                     const customised = column.columnType === "SOURCE" && column.outputHeading !== column.sourceHeading;
                     const ruleDescription = describeColumnRule(column);
                     return (
-                      <Fragment key={column.clientId}>
-                        <th
-                          aria-hidden="true"
-                          className={insertionIndex === index ? "outputInsertionSlot active" : "outputInsertionSlot"}
-                          onDragOver={(event) => { if (canInteract) { event.preventDefault(); setInsertionIndex(index); } }}
-                          onDrop={(event) => dropAtInsertion(event, index)}
-                        />
-                        <th className={`${selectedColumnId === column.clientId ? "outputHeadingCell selected" : "outputHeadingCell"}${customised || column.columnType === "STATIC" ? " customised" : ""}`} draggable={canInteract} onDragEnd={finishDrag} onDragOver={(event) => updateInsertionFromColumn(event, index)} onDrop={(event) => dropAtInsertion(event, insertionIndex ?? index)} onDragStart={(event) => {
+                        <th key={column.clientId} className={outputHeadingInsertionClassName(selectedColumnId === column.clientId, customised || column.columnType === "STATIC", insertionIndex, index, draft.columns.length)} draggable={canInteract} onDragEnd={finishDrag} onDragOver={(event) => updateInsertionFromColumn(event, index)} onDrop={(event) => dropAtInsertion(event, insertionIndex ?? index)} onDragStart={(event) => {
                           event.dataTransfer.setData(outputDragType, column.clientId);
                           event.dataTransfer.effectAllowed = "move";
                           setDragState({ kind: "output", clientId: column.clientId });
@@ -295,27 +370,14 @@ export function OutputProfileBuilder({ source, initialDraft, profiles, initialEf
                             </div>
                           ) : null}
                         </th>
-                      </Fragment>
                     );
                   })}
-                  <th
-                    aria-hidden="true"
-                    className={insertionIndex === draft.columns.length ? "outputInsertionSlot active" : "outputInsertionSlot"}
-                    onDragOver={(event) => { if (canInteract) { event.preventDefault(); setInsertionIndex(draft.columns.length); } }}
-                    onDrop={(event) => dropAtInsertion(event, draft.columns.length)}
-                  />
                 </tr>
               </thead>
               <tbody>
                 {preview.outputRows.map((row, rowIndex) => (
                   <tr key={rowIndex}>
-                    {row.map((cell, columnIndex) => (
-                      <Fragment key={`${draft.columns[columnIndex].clientId}-${rowIndex}`}>
-                        <td className="outputInsertionBodyCell" aria-hidden="true" />
-                        <td>{cell}</td>
-                      </Fragment>
-                    ))}
-                    <td className="outputInsertionBodyCell" aria-hidden="true" />
+                    {row.map((cell, columnIndex) => <td key={`${draft.columns[columnIndex].clientId}-${rowIndex}`}>{cell}</td>)}
                   </tr>
                 ))}
               </tbody>

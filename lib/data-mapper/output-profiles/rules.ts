@@ -148,6 +148,7 @@ export function transformNumericValue(
 }
 
 export function sourceRowMatchesFilter(sourceRow: readonly string[], filter: Omit<OutputProfileFilterDraft, "clientId">) {
+  if (filter.sourceColumnIndex === null) return false;
   const sourceValue = sourceRow[filter.sourceColumnIndex] ?? "";
   const sourceText = sourceValue.trim();
   if (filter.operator === "IS_BLANK") return sourceText.length === 0;

@@ -15,6 +15,7 @@ function resolve(overrides: Partial<Parameters<typeof resolveOutputFilename>[0]>
 describe("shared Output Profile filename resolver", () => {
   it("derives the default effective date from the current date context", () => {
     expect(defaultEffectiveDate(new Date("2026-09-13T12:00:00.000Z"))).toBe("2026-09-13");
+    expect(defaultEffectiveDate(new Date(2026, 11, 31, 23, 59, 59))).toBe("2026-12-31");
   });
 
   it("resolves every supported date, profile and source token deterministically", () => {
@@ -46,6 +47,13 @@ describe("shared Output Profile filename resolver", () => {
     expect(past.finalFilename).toBe("NHS_Pricing_August_2026.csv");
     expect(future.cleanTemplate).toBe(template);
     expect(past.cleanTemplate).toBe(template);
+  });
+
+  it("keeps explicit date-only values stable across month and year boundaries", () => {
+    expect(resolve({ filenameTemplate: "{date}_{day}_{month}_{year}", effectiveDate: "2026-12-31" }).finalFilename)
+      .toBe("2026-12-31_31_December_2026.csv");
+    expect(resolve({ filenameTemplate: "{date}_{day}_{month}_{year}", effectiveDate: "2027-01-01" }).finalFilename)
+      .toBe("2027-01-01_01_January_2027.csv");
   });
 
   it("removes a manually supplied known extension and derives the selected extension once", () => {

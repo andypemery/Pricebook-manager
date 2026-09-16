@@ -55,7 +55,7 @@ export type OutputProfileColumnDraft = {
 
 export type OutputProfileFilterDraft = {
   clientId: string;
-  sourceColumnIndex: number;
+  sourceColumnIndex: number | null;
   sourceHeading: string;
   operator: OutputProfileFilterOperator;
   comparisonValue: string;
@@ -105,4 +105,27 @@ export type OutputProfileSummary = {
   sourceWorkbookImportId: string;
   sourceWorksheetId: string;
   outputFormat: OutputProfileFormat;
+  outputColumnCount: number;
+  originWorkbookFileName: string;
+  originWorksheetName: string;
+};
+
+export type OutputProfileCompatibilityField = {
+  key: string;
+  expectedHeading: string;
+  status: "MATCHED" | "MISSING" | "AMBIGUOUS" | "MANUAL";
+  sourceColumnIndex: number | null;
+  candidateSourceColumnIndexes: number[];
+  outputColumnClientIds: string[];
+  filterClientIds: string[];
+};
+
+export type AppliedOutputProfileContext = {
+  profileId: string;
+  profileName: string;
+  originWorkbookFileName: string;
+  originWorksheetName: string;
+  requiredFieldCount: number;
+  matchedFieldCount: number;
+  fields: OutputProfileCompatibilityField[];
 };

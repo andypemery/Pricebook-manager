@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef } from "react";
-import { FileOutput, Info } from "lucide-react";
+import { CalendarDays, FileOutput, Info } from "lucide-react";
 import { effectiveWorksheetName, outputProfileAttentionIssues } from "@/lib/data-mapper/output-profiles/configuration";
 import { filenameTokenLabels, filenameTokens, resolveOutputFilename, type FilenameToken } from "@/lib/data-mapper/output-profiles/filename";
 import type { OutputProfileDraft } from "@/lib/data-mapper/output-profiles/types";
@@ -34,6 +34,7 @@ export function OutputProfileSettings({
   onFilenameDateChange: (value: string) => void;
 }) {
   const filenameInput = useRef<HTMLInputElement>(null);
+  const filenameDateInput = useRef<HTMLInputElement>(null);
   const resolved = useMemo(() => resolveOutputFilename({
     filenameTemplate: profile.filenameTemplate,
     profileName: profile.name,
@@ -57,6 +58,13 @@ export function OutputProfileSettings({
       input?.focus();
       input?.setSelectionRange(start + insertion.length, start + insertion.length);
     });
+  }
+
+  function openFilenameDatePicker() {
+    const input = filenameDateInput.current;
+    if (!input) return;
+    input.focus();
+    if (typeof input.showPicker === "function") input.showPicker();
   }
 
   return (
@@ -83,9 +91,14 @@ export function OutputProfileSettings({
             {filenameTokens.map((token) => <option value={token} key={token}>{filenameTokenLabels[token]} · {`{${token}}`}</option>)}
           </select>
         </label>
-        <label className="field">
+        <label className="field filenameDateField">
           <span title="Used for date tokens in the output filename.">Filename date</span>
-          <input type="date" value={filenameDate} onChange={(event) => onFilenameDateChange(event.target.value)} />
+          <span className="dateInputWrap">
+            <input ref={filenameDateInput} type="date" value={filenameDate} onChange={(event) => onFilenameDateChange(event.target.value)} />
+            <button type="button" className="datePickerButton" aria-label="Choose filename date" onClick={openFilenameDatePicker}>
+              <CalendarDays aria-hidden="true" size={18} />
+            </button>
+          </span>
         </label>
         <label className="field">
           <span>Output format</span>

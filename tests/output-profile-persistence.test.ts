@@ -252,5 +252,8 @@ describe("Output Profile persistence", () => {
     expect(() => validateOutputProfileInput(profileInput({
       columns: [sourceColumn(0, "Product Code", "   ")]
     }), ["Product Code", "Description"])).toThrow("Output heading is required.");
+    expect(() => validateOutputProfileInput(profileInput({
+      filters: [{ sourceColumnIndex: 99, sourceHeading: "Invented", operator: "EQUALS", comparisonValue: "Yes" }]
+    }), ["Product Code", "Description"])).toThrow("A filter refers to a source column that does not exist.");
   });
 });

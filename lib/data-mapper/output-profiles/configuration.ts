@@ -31,6 +31,10 @@ export function outputProfileAttentionIssues(
   const issues: string[] = [];
   if (!profile.name.trim()) issues.push("Add a profile name.");
   if (profile.columns.length === 0) issues.push("Add at least one output column.");
+  const unresolvedOutputFields = profile.columns.filter((column) => column.columnType === "SOURCE" && column.sourceColumnIndex === null).length;
+  const unresolvedFilterFields = profile.filters.filter((filter) => filter.sourceColumnIndex === null).length;
+  if (unresolvedOutputFields > 0) issues.push(`Match ${unresolvedOutputFields} unresolved output source ${unresolvedOutputFields === 1 ? "field" : "fields"}.`);
+  if (unresolvedFilterFields > 0) issues.push(`Match ${unresolvedFilterFields} unresolved filter source ${unresolvedFilterFields === 1 ? "field" : "fields"}.`);
   const filename = resolveOutputFilename({
     filenameTemplate: profile.filenameTemplate,
     profileName: profile.name,

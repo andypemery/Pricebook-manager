@@ -40,10 +40,11 @@ export function OutputProfileFilters({ headers, filters, matchMode, canEdit, onA
               <span className="filterRuleNumber" aria-hidden="true">{index + 1}</span>
               <label className="field">
                 <span>Source heading</span>
-                <select value={filter.sourceColumnIndex} disabled={!canEdit} onChange={(event) => {
+                <select value={filter.sourceColumnIndex ?? ""} disabled={!canEdit} onChange={(event) => {
                   const sourceColumnIndex = Number(event.target.value);
                   onChange(filter.clientId, { sourceColumnIndex, sourceHeading: headers[sourceColumnIndex] ?? "" });
                 }}>
+                  {filter.sourceColumnIndex === null ? <option value="">Needs matching</option> : null}
                   {headers.map((heading, sourceColumnIndex) => <option key={`${heading}-${sourceColumnIndex}`} value={sourceColumnIndex}>{heading}</option>)}
                 </select>
               </label>

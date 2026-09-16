@@ -117,14 +117,15 @@ button, input, textarea, select { font: inherit; }
   padding: 20px 14px;
   position: sticky;
   top: 0;
+  z-index: 40;
   height: 100vh;
   display: flex;
   flex-direction: column;
   gap: 18px;
-  overflow-y: auto;
+  overflow: visible;
   transition: width 160ms ease, padding 160ms ease;
 }
-.sidebar.collapsed { width: 82px; padding-left: 12px; padding-right: 12px; overflow-x: visible; }
+.sidebar.collapsed { width: 82px; padding-left: 12px; padding-right: 12px; }
 .theme-light .sidebar {
   background: #ffffff;
   border-right-color: #d7e3f2;
@@ -206,6 +207,9 @@ button, input, textarea, select { font: inherit; }
   flex-direction: column;
   gap: 6px;
   flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 .sidebarNav a, .sidebarLogout button {
   position: relative;
@@ -256,11 +260,11 @@ button, input, textarea, select { font: inherit; }
 .sidebar.collapsed .sidebarIdentity:focus-visible .navTooltip { display: block; }
 .sidebarToggle {
   position: absolute;
-  z-index: 3;
-  top: 18px;
-  right: -15px;
-  width: 30px;
-  height: 30px;
+  z-index: 90;
+  top: 88px;
+  right: -18px;
+  width: 32px;
+  height: 32px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -956,6 +960,23 @@ p { line-height: 1.6; }
 .linkButton:hover { text-decoration: underline; }
 
 .outputProfileBuilder { display: grid; gap: 0; margin-bottom: 20px; }
+.outputProfileContext {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.outputProfileContext > div:not(.outputProfileContextActions) { min-width: 0; display: grid; gap: 4px; }
+.outputProfileContext span { color: var(--text-muted); font-size: 0.74rem; font-weight: 900; letter-spacing: 0.05em; text-transform: uppercase; }
+.outputProfileContext strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.outputProfileContextActions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.profileCompatibility { margin-bottom: 20px; }
+.profileCompatibility .sectionHeader { padding: 0 0 14px; background: transparent; }
+.profileCompatibilitySummary { margin: 0; font-weight: 800; }
+.profileCompatibilityFields { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin-top: 14px; }
+.profileCompatibilityField { margin: 0; padding: 12px; border: 1px solid var(--border-soft); border-radius: 12px; background: var(--surface-panel); }
+.profileCompatibilityField small { color: var(--text-muted); line-height: 1.45; }
 .outputProfileIdentity {
   display: flex;
   align-items: end;
@@ -992,6 +1013,7 @@ p { line-height: 1.6; }
   background: var(--surface-panel);
 }
 .builderSheet { width: max-content; min-width: 100%; border-collapse: collapse; table-layout: fixed; }
+.outputBuilderSheet { width: max-content; min-width: 0; }
 .builderSheet th, .builderSheet td {
   width: 210px;
   min-width: 210px;
@@ -1052,20 +1074,20 @@ p { line-height: 1.6; }
 .outputSpreadsheetCard { border-color: rgba(0, 236, 227, 0.38); }
 .emptyOutputDropzone { min-height: 170px; display: flex; align-items: center; justify-content: center; border: 2px dashed var(--border-soft); border-top: 0; }
 .outputSheetScroll.dragTargetActive { outline: 2px dashed var(--axiom-aqua); outline-offset: -5px; background: rgba(0, 236, 227, 0.07); }
-.outputInsertionSlot, .outputInsertionBodyCell {
-  width: 10px;
-  min-width: 10px;
-  padding: 0 !important;
-  border-left: 0 !important;
-  border-right: 0 !important;
-  transition: width 100ms ease, min-width 100ms ease, background 100ms ease;
+.outputHeadingCell.insertionBefore::before, .outputHeadingCell.insertionAfter::after {
+  content: "";
+  position: absolute;
+  z-index: 2;
+  top: 5px;
+  bottom: 5px;
+  width: 4px;
+  border-radius: 999px;
+  background: var(--axiom-aqua);
+  box-shadow: 0 0 14px rgba(0, 236, 227, 0.7);
+  pointer-events: none;
 }
-.outputInsertionSlot.active {
-  width: 24px;
-  min-width: 24px;
-  background: linear-gradient(90deg, transparent 9px, var(--axiom-aqua) 9px, var(--axiom-aqua) 15px, transparent 15px);
-  box-shadow: 0 0 18px rgba(0, 236, 227, 0.55);
-}
+.outputHeadingCell.insertionBefore::before { left: -2px; }
+.outputHeadingCell.insertionAfter::after { right: -2px; }
 .emptyOutputMessage { display: grid; justify-items: center; gap: 7px; padding: 30px; color: var(--text-muted); }
 .emptyOutputMessage svg { color: var(--axiom-aqua); }
 .emptyOutputMessage strong { color: var(--text-main); }
@@ -1168,6 +1190,12 @@ p { line-height: 1.6; }
 .profileManagerControls { display: grid; grid-template-columns: minmax(240px, 1fr) auto; gap: 16px; align-items: end; }
 .profileSelector { margin: 0; }
 .profileManagerActions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+.applySavedProfile { display: grid; grid-template-columns: minmax(240px, 1.2fr) minmax(240px, 1fr) auto; gap: 14px; align-items: end; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-soft); }
+.applySavedProfile .field { margin: 0; }
+.applySavedProfileDetails { min-width: 0; display: grid; gap: 4px; padding-bottom: 2px; }
+.applySavedProfileDetails span, .applySavedProfileDetails strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.applySavedProfileDetails span { color: var(--text-muted); font-size: 0.78rem; }
+.applySavedProfileDetails strong { font-size: 0.82rem; }
 .deleteConfirmation, .discardConfirmation {
   display: flex;
   align-items: center;
@@ -1185,6 +1213,24 @@ p { line-height: 1.6; }
 .outputProfileSettings { margin-top: 20px; }
 .outputSettingsGrid { display: grid; grid-template-columns: minmax(280px, 2fr) minmax(190px, 1fr) minmax(190px, 1fr) minmax(160px, 0.8fr); gap: 14px; align-items: end; }
 .outputSettingsGrid .field, .formatSettings .field { margin: 0; }
+.dateInputWrap { display: flex; width: 100%; }
+.dateInputWrap input { flex: 1 1 auto; min-width: 0; border-radius: 12px 0 0 12px; }
+.datePickerButton {
+  min-width: 52px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 12px;
+  border: 1px solid var(--border-soft);
+  border-left: 0;
+  border-radius: 0 12px 12px 0;
+  background: var(--axiom-navy);
+  color: var(--axiom-aqua);
+  cursor: pointer;
+}
+.datePickerButton:hover, .datePickerButton:focus-visible { background: #1c0984; outline: none; box-shadow: var(--focus-ring); }
+.theme-light .datePickerButton { background: #eef7fd; color: #007fa0; border-color: #cdd8ea; }
+@media (prefers-color-scheme: light) { .theme-system .datePickerButton { background: #eef7fd; color: #007fa0; border-color: #cdd8ea; } }
 .filenamePreview {
   display: flex;
   align-items: center;
@@ -1258,7 +1304,8 @@ p { line-height: 1.6; }
   .validationFilters { grid-template-columns: 1fr; }
   .outputProfileIdentity, .sheetHeader { align-items: stretch; flex-direction: column; }
   .outputProfileSaveArea { justify-content: flex-start; }
-  .outputProfileWorkspaceGrid, .filterRule, .profileManagerControls, .outputSettingsGrid, .formatSettings, .outputColumnFields { grid-template-columns: 1fr; }
+  .outputProfileWorkspaceGrid, .filterRule, .profileManagerControls, .applySavedProfile, .outputProfileContext, .outputSettingsGrid, .formatSettings, .outputColumnFields { grid-template-columns: 1fr; }
+  .outputProfileContextActions { justify-content: flex-start; }
   .profileManagerActions { justify-content: flex-start; }
   .deleteConfirmation, .discardConfirmation { align-items: flex-start; flex-direction: column; }
   .filterRuleNumber { display: none; }

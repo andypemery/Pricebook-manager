@@ -1,5 +1,12 @@
 import type { PrismaClient } from "@prisma/client";
-import type { OutputProfileDraft, SaveOutputProfileInput, SourceWorksheetPreview } from "@/lib/data-mapper/output-profiles/types";
+import { applyReusableProfileToSource } from "@/lib/data-mapper/output-profiles/compatibility";
+import type {
+  AppliedOutputProfileContext,
+  OutputProfileDraft,
+  OutputProfileSummary,
+  SaveOutputProfileInput,
+  SourceWorksheetPreview
+} from "@/lib/data-mapper/output-profiles/types";
 import { stringArrayFromJson, stringMatrixFromJson, validateOutputProfileInput } from "@/lib/data-mapper/output-profiles/validation";
 
 export class OutputProfileNotFoundError extends Error {}
@@ -100,11 +107,38 @@ export async function listOutputProfileWorkspace(db: PrismaClient, tenantId: str
   return { profiles, sourceImports };
 }
 
+export async function listReusableOutputProfiles(db: PrismaClient, tenantId: string): Promise<OutputProfileSummary[]> {
+  const profiles = await db.outputProfile.findMany({
+    where: { tenantId },
+    orderBy: { updatedAt: "desc" },
+    select: {
+      id: true,
+      name: true,
+      outputFormat: true,
+      sourceWorkbookImportId: true,
+      sourceWorksheetId: true,
+      _count: { select: { columns: true } },
+      sourceWorkbookImport: { select: { originalFileName: true } },
+      sourceWorksheet: { select: { name: true } }
+    }
+  });
+  return profiles.map((profile) => ({
+    id: profile.id,
+    name: profile.name,
+    sourceWorkbookImportId: profile.sourceWorkbookImportId,
+    sourceWorksheetId: profile.sourceWorksheetId,
+    outputFormat: profile.outputFormat,
+    outputColumnCount: profile._count.columns,
+    originWorkbookFileName: profile.sourceWorkbookImport.originalFileName,
+    originWorksheetName: profile.sourceWorksheet.name
+  }));
+}
+
 export async function loadOutputProfileBuilder(
   db: PrismaClient,
   tenantId: string,
-  selection: { profileId?: string; sourceWorkbookImportId?: string; sourceWorksheetId?: string }
-): Promise<{ source: SourceWorksheetPreview; draft: OutputProfileDraft } | null> {
+  selection: { profileId?: string; applyProfileId?: string; sourceWorkbookImportId?: string; sourceWorksheetId?: string }
+): Promise<{ source: SourceWorksheetPreview; draft: OutputProfileDraft; application?: AppliedOutputProfileContext } | null> {
   if (selection.profileId) {
     const profile = await db.outputProfile.findFirst({
       where: { id: selection.profileId, tenantId },
@@ -187,31 +221,47 @@ export async function loadOutputProfileBuilder(
   }
 
   if (!selection.sourceWorkbookImportId || !selection.sourceWorksheetId) return null;
-  const worksheet = await db.sourceWorksheet.findFirst({
-    where: {
-      id: selection.sourceWorksheetId,
-      sourceWorkbookImportId: selection.sourceWorkbookImportId,
-      sourceWorkbookImport: { tenantId }
-    },
-    select: {
-      id: true,
-      name: true,
-      headers: true,
-      sampleRows: true,
-      sourceWorkbookImportId: true,
-      sourceWorkbookImport: { select: { originalFileName: true } }
-    }
-  });
+  const [worksheet, reusableProfile] = await Promise.all([
+    db.sourceWorksheet.findFirst({
+      where: {
+        id: selection.sourceWorksheetId,
+        sourceWorkbookImportId: selection.sourceWorkbookImportId,
+        sourceWorkbookImport: { tenantId }
+      },
+      select: {
+        id: true,
+        name: true,
+        headers: true,
+        sampleRows: true,
+        sourceWorkbookImportId: true,
+        sourceWorkbookImport: { select: { originalFileName: true } }
+      }
+    }),
+    selection.applyProfileId
+      ? loadOutputProfileBuilder(db, tenantId, { profileId: selection.applyProfileId })
+      : Promise.resolve(null)
+  ]);
   if (!worksheet) return null;
+  const source = {
+    id: worksheet.id,
+    sourceWorkbookImportId: worksheet.sourceWorkbookImportId,
+    workbookFileName: worksheet.sourceWorkbookImport.originalFileName,
+    worksheetName: worksheet.name,
+    headers: stringArrayFromJson(worksheet.headers, "Source headings"),
+    sampleRows: stringMatrixFromJson(worksheet.sampleRows, "Source sample rows").slice(0, 3)
+  } satisfies SourceWorksheetPreview;
+  if (selection.applyProfileId) {
+    if (!reusableProfile) return null;
+    const applied = applyReusableProfileToSource({
+      profile: reusableProfile.draft,
+      currentSource: source,
+      originWorkbookFileName: reusableProfile.source.workbookFileName,
+      originWorksheetName: reusableProfile.source.worksheetName
+    });
+    return { source, ...applied };
+  }
   return {
-    source: {
-      id: worksheet.id,
-      sourceWorkbookImportId: worksheet.sourceWorkbookImportId,
-      workbookFileName: worksheet.sourceWorkbookImport.originalFileName,
-      worksheetName: worksheet.name,
-      headers: stringArrayFromJson(worksheet.headers, "Source headings"),
-      sampleRows: stringMatrixFromJson(worksheet.sampleRows, "Source sample rows").slice(0, 3)
-    },
+    source,
     draft: {
       id: null,
       name: "",
@@ -220,8 +270,8 @@ export async function loadOutputProfileBuilder(
       csvDelimiter: "COMMA",
       csvIncludeHeader: true,
       xlsxWorksheetName: "",
-      sourceWorkbookImportId: worksheet.sourceWorkbookImportId,
-      sourceWorksheetId: worksheet.id,
+      sourceWorkbookImportId: source.sourceWorkbookImportId,
+      sourceWorksheetId: source.id,
       columns: [],
       filterMatchMode: "ALL",
       filters: []

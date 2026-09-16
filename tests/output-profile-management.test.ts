@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   deleteOutputProfileForTenant,
   duplicateOutputProfileForTenant,
+  listReusableOutputProfiles,
   listOutputProfileWorkspace,
   loadOutputProfileBuilder,
   OutputProfileNotFoundError
@@ -128,6 +129,33 @@ describe("reusable Output Profile management", () => {
       .toEqual({ id: true, name: true, columnCount: true });
   });
 
+  it("lists reusable profile picker metadata in one tenant-scoped compact query", async () => {
+    const findMany = vi.fn().mockResolvedValue([{
+      id: "profile-1",
+      name: "NHS",
+      sourceWorkbookImportId: "source-1",
+      sourceWorksheetId: "worksheet-1",
+      outputFormat: "CSV",
+      _count: { columns: 3 },
+      sourceWorkbookImport: { originalFileName: "August.xlsx" },
+      sourceWorksheet: { name: "Products" }
+    }]);
+    const db = { outputProfile: { findMany } } as unknown as PrismaClient;
+
+    await expect(listReusableOutputProfiles(db, "tenant-1")).resolves.toEqual([{
+      id: "profile-1",
+      name: "NHS",
+      sourceWorkbookImportId: "source-1",
+      sourceWorksheetId: "worksheet-1",
+      outputFormat: "CSV",
+      outputColumnCount: 3,
+      originWorkbookFileName: "August.xlsx",
+      originWorksheetName: "Products"
+    }]);
+    expect(findMany.mock.calls[0]?.[0].where).toEqual({ tenantId: "tenant-1" });
+    expect(findMany.mock.calls[0]?.[0].select).not.toHaveProperty("sourceWorkbookImport.worksheets");
+  });
+
   it("switches by loading independent tenant-scoped profile definitions", async () => {
     const first = {
       id: "profile-1", ...storedProfile("NHS"),
@@ -157,5 +185,69 @@ describe("reusable Output Profile management", () => {
       { id: "profile-1", tenantId: "tenant-1" },
       { id: "profile-2", tenantId: "tenant-1" }
     ]);
+  });
+
+  it("applies a tenant-owned profile to a different tenant-owned worksheet without writing or changing the master", async () => {
+    const profile = {
+      id: "profile-1", ...storedProfile("NHS"),
+      sourceWorkbookImport: { originalFileName: "August.xlsx" },
+      sourceWorksheet: { id: "worksheet-old", name: "Products", headers: ["Product Code", "Eligible"], sampleRows: [["A", "Yes"]] },
+      columns: [{ id: "column-1", ...storedProfile().columns[0] }],
+      filters: [{ id: "filter-1", ...storedProfile().filters[0] }]
+    };
+    const currentWorksheet = {
+      id: "worksheet-new",
+      name: "September Products",
+      headers: ["Eligible", "Extra", "Product Code"],
+      sampleRows: [["Yes", "x", "B"]],
+      sourceWorkbookImportId: "source-new",
+      sourceWorkbookImport: { originalFileName: "September.xlsx" }
+    };
+    const profileFindFirst = vi.fn().mockResolvedValue(profile);
+    const worksheetFindFirst = vi.fn().mockResolvedValue(currentWorksheet);
+    const create = vi.fn();
+    const update = vi.fn();
+    const db = {
+      outputProfile: { findFirst: profileFindFirst, create, update },
+      sourceWorksheet: { findFirst: worksheetFindFirst }
+    } as unknown as PrismaClient;
+
+    const result = await loadOutputProfileBuilder(db, "tenant-1", {
+      sourceWorkbookImportId: "source-new",
+      sourceWorksheetId: "worksheet-new",
+      applyProfileId: "profile-1"
+    });
+
+    expect(result?.draft).toMatchObject({ id: null, sourceWorkbookImportId: "source-new", sourceWorksheetId: "worksheet-new" });
+    expect(result?.draft.columns[0]).toMatchObject({ sourceColumnIndex: 2, sourceHeading: "Product Code" });
+    expect(result?.draft.filters[0]).toMatchObject({ sourceColumnIndex: 0, sourceHeading: "Eligible" });
+    expect(result?.application).toMatchObject({ profileId: "profile-1", originWorkbookFileName: "August.xlsx", matchedFieldCount: 2 });
+    expect(worksheetFindFirst.mock.calls[0]?.[0].where).toEqual({
+      id: "worksheet-new",
+      sourceWorkbookImportId: "source-new",
+      sourceWorkbookImport: { tenantId: "tenant-1" }
+    });
+    expect(profileFindFirst.mock.calls[0]?.[0].where).toEqual({ id: "profile-1", tenantId: "tenant-1" });
+    expect(create).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
+    expect(profile.columns[0].sourceColumnIndex).toBe(0);
+  });
+
+  it("rejects cross-tenant profile application without a write", async () => {
+    const db = {
+      outputProfile: { findFirst: vi.fn().mockResolvedValue(null), create: vi.fn(), update: vi.fn() },
+      sourceWorksheet: { findFirst: vi.fn().mockResolvedValue({
+        id: "worksheet-new", name: "Products", headers: ["SKU"], sampleRows: [], sourceWorkbookImportId: "source-new",
+        sourceWorkbookImport: { originalFileName: "September.xlsx" }
+      }) }
+    } as unknown as PrismaClient;
+
+    await expect(loadOutputProfileBuilder(db, "tenant-1", {
+      sourceWorkbookImportId: "source-new",
+      sourceWorksheetId: "worksheet-new",
+      applyProfileId: "foreign-profile"
+    })).resolves.toBeNull();
+    expect(db.outputProfile.create).not.toHaveBeenCalled();
+    expect(db.outputProfile.update).not.toHaveBeenCalled();
   });
 });
