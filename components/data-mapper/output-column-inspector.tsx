@@ -12,13 +12,29 @@ function adjustmentValueLabel(adjustmentType: OutputProfileColumnDraft["adjustme
 }
 
 export function OutputColumnInspector({ column, canEdit, onChange }: {
-  column: OutputProfileColumnDraft;
+  column: OutputProfileColumnDraft | null;
   canEdit: boolean;
   onChange: (changes: Partial<Omit<OutputProfileColumnDraft, "clientId" | "columnType" | "sourceColumnIndex" | "sourceHeading">>) => void;
 }) {
+  if (!column) {
+    return (
+      <aside className="outputColumnInspector empty" aria-labelledby="column-settings-title">
+        <div className="columnInspectorHeader">
+          <p className="sheetLabel">Selected column</p>
+          <h3 id="column-settings-title">Column Settings</h3>
+        </div>
+        <p className="muted">Select an output column to configure it.</p>
+      </aside>
+    );
+  }
+
   const isStatic = column.columnType === "STATIC";
   return (
-    <div className="outputColumnInspector" aria-label="Selected output column settings">
+    <aside className="outputColumnInspector" aria-labelledby="column-settings-title">
+      <div className="columnInspectorHeader">
+        <p className="sheetLabel">Selected column</p>
+        <h3 id="column-settings-title">Column Settings</h3>
+      </div>
       <div className="outputColumnFields">
         <label className="field">
           <span>Output heading</span>
@@ -59,6 +75,6 @@ export function OutputColumnInspector({ column, canEdit, onChange }: {
           </>
         )}
       </div>
-    </div>
+    </aside>
   );
 }

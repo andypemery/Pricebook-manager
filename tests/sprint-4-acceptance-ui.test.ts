@@ -6,7 +6,8 @@ import { navigationItems } from "../config/navigation.config";
 import { sidebarClassName, sidebarCollapseStorageKey } from "../components/app-shell";
 import { OutputProfileFilters } from "../components/data-mapper/output-profile-filters";
 import { OutputProfileSettings } from "../components/data-mapper/output-profile-settings";
-import { OutputProfileWorkspace, profileResumeHref, worksheetResumeHref } from "../components/data-mapper/output-profile-workspace";
+import { OutputProfileWorksheets } from "../components/data-mapper/output-profile-worksheets";
+import { OutputProfileWorkspace, friendlyWorkbookName, profileResumeHref, worksheetResumeHref } from "../components/data-mapper/output-profile-workspace";
 import { ValidationNextSteps } from "../components/data-mapper/validation-next-steps";
 import type { OutputProfileDraft } from "../lib/data-mapper/output-profiles/types";
 
@@ -59,7 +60,7 @@ describe("Sprint 4 acceptance navigation and resume workflow", () => {
     expect(css).toMatch(/\.sidebarNav\s*\{[^}]*overflow-y:\s*auto;/s);
   });
 
-  it("renders tenant-scoped resume links and keeps long workbook names inside stacked cards", () => {
+  it("renders tenant-scoped resume links and one compact item per workbook", () => {
     const longName = "Axiom_Data_Mapper_Demo_Pricebook_20000_Rows_exceljs (2).xlsx";
     const worksheetNames = ["HP Print", "Canon Print", "Epson Print", "Lenovo Devices", "Dell Devices", "Accessories", "Managed Services", "Software Licences"];
     const markup = renderToStaticMarkup(createElement(OutputProfileWorkspace, {
@@ -88,14 +89,15 @@ describe("Sprint 4 acceptance navigation and resume workflow", () => {
     expect(markup).toContain(profileResumeHref("profile / 1").replaceAll("&", "&amp;"));
     expect(markup).toContain(worksheetResumeHref("source / 1", "worksheet / 1").replaceAll("&", "&amp;"));
     expect(markup).toContain(longName);
-    expect(markup).toContain("Resume NHS Contract");
-    worksheetNames.forEach((name) => expect(markup).toContain(name));
-    expect(markup.indexOf("Saved Output Profiles")).toBeLessThan(markup.indexOf("Validated Sources"));
+    expect(markup).toContain('aria-label="Continue NHS Contract"');
+    expect(markup).toContain("Recent workbooks");
+    expect(markup).toContain("8 worksheets");
+    worksheetNames.forEach((name) => expect(markup).not.toContain(`>${name}<`));
+    expect(markup).toContain(friendlyWorkbookName(longName));
 
     const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
-    expect(css).toMatch(/\.outputProfileWorkspaceGrid\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/s);
-    expect(css).toMatch(/\.workspaceFilename[^}]*overflow-wrap:\s*anywhere/s);
-    expect(css).toMatch(/\.sourceWorksheetChoices\s*\{[^}]*repeat\(auto-fit/s);
+    expect(css).toMatch(/\.recentWorkbookRow\s*\{[^}]*grid-template-columns:/s);
+    expect(css).toMatch(/\.recentWorkbookIdentity strong\s*\{[^}]*text-overflow:\s*ellipsis/s);
   });
 });
 
@@ -155,8 +157,8 @@ describe("Sprint 4 acceptance filter and output settings UI", () => {
         onRemove: vi.fn(),
         onMatchModeChange: vi.fn()
       }));
-      expect(markup).toContain('aria-label="Add row filter"');
-      expect(markup.lastIndexOf("Add row filter")).toBeGreaterThan(markup.lastIndexOf("filterRule"));
+      expect(markup).toContain('aria-label="Add row rule"');
+      expect(markup.lastIndexOf("Add row rule")).toBeGreaterThan(markup.lastIndexOf("filterRule"));
     }
   });
 
@@ -193,21 +195,23 @@ describe("Sprint 4 acceptance filter and output settings UI", () => {
   });
 
   it("shows reusable worksheet modes, current-workbook selection, compatibility and compact ZIP examples", () => {
-    const markup = renderToStaticMarkup(createElement(OutputProfileSettings, {
-      profile: profile({
+    const worksheetProfile = profile({
         name: "NHS",
         worksheetMode: "SEPARATE_FILES",
         worksheetNameMode: "CUSTOM",
         worksheetNameMappings: { "hp print": "HP", "canon print": "Canon" },
         selectedWorksheetIds: ["sheet-1", "sheet-2"],
         columns: [{ clientId: "column-1", columnType: "SOURCE", sourceColumnIndex: 0, sourceHeading: "SKU", outputHeading: "SKU", staticValue: "", adjustmentType: "NONE", adjustmentValue: "", roundingDecimalPlaces: null }]
-      }),
+      });
+    const worksheets = [
+      { id: "sheet-1", name: "HP Print", position: 0, headers: ["SKU"] },
+      { id: "sheet-2", name: "Canon Print", position: 1, headers: ["SKU"] },
+      { id: "sheet-3", name: "Software", position: 2, headers: ["Description"] }
+    ];
+    const markup = renderToStaticMarkup(createElement(OutputProfileSettings, {
+      profile: worksheetProfile,
       sourceFilename: "Supplier.xlsx",
-      worksheets: [
-        { id: "sheet-1", name: "HP Print", position: 0, headers: ["SKU"] },
-        { id: "sheet-2", name: "Canon Print", position: 1, headers: ["SKU"] },
-        { id: "sheet-3", name: "Software", position: 2, headers: ["Description"] }
-      ],
+      worksheets,
       filenameDate: "2026-09-16",
       canEdit: true,
       onChange: vi.fn(),
@@ -216,28 +220,36 @@ describe("Sprint 4 acceptance filter and output settings UI", () => {
     expect(markup).toContain("Combine all worksheets into one");
     expect(markup).toContain("Keep source worksheets separate");
     expect(markup).toContain("Create a separate file for each worksheet");
-    expect(markup).toContain("Worksheets to include");
-    expect(markup).toContain("This selection applies only to the current workbook");
-    expect(markup).toContain("Software");
-    expect(markup).toContain("⚠ Software");
-    expect(markup).toContain('title="Software: Missing source heading');
+    expect(markup).not.toContain("Which source worksheets should be included?");
     expect(markup).toContain("NHS_September_2026.zip");
     expect(markup).toContain("NHS_September_2026_HP.csv");
     expect(markup).toContain("NHS_September_2026_Canon.csv");
+
+    const worksheetMarkup = renderToStaticMarkup(createElement(OutputProfileWorksheets, {
+      profile: worksheetProfile,
+      worksheets,
+      canEdit: true,
+      onChange: vi.fn()
+    }));
+    expect(worksheetMarkup).toContain("Which source worksheets should be included?");
+    expect(worksheetMarkup).toContain("2 of 3 worksheets selected");
+    expect(worksheetMarkup).toContain("⚠ Software");
+    expect(worksheetMarkup).toContain('title="Software: Missing source heading');
   });
 });
 
 describe("Sprint 4 current Output Profile page cleanup", () => {
-  it("keeps Validated Sources on Dashboard and removes source libraries from the current editor", () => {
+  it("keeps compact recent workbooks on Dashboard and removes source libraries from the current editor", () => {
     const mappingPage = readFileSync(new URL("../app/(app)/mapping/page.tsx", import.meta.url), "utf8");
     const dashboardPage = readFileSync(new URL("../app/(app)/dashboard/page.tsx", import.meta.url), "utf8");
     const workspace = readFileSync(new URL("../components/data-mapper/output-profile-workspace.tsx", import.meta.url), "utf8");
 
     expect(mappingPage).not.toContain("OutputProfileWorkspace");
-    expect(mappingPage).not.toContain("Validated Sources");
+    expect(mappingPage).not.toContain("Recent workbooks");
     expect(mappingPage).toContain("Choose a workbook to build or apply an Output Profile");
     expect(dashboardPage).toContain("OutputProfileWorkspace");
-    expect(workspace).toContain("Validated Sources");
+    expect(workspace).toContain("Recent workbooks");
+    expect(workspace).not.toContain("sourceWorksheetChoices");
     expect(workspace).toContain("worksheetResumeHref");
   });
 });

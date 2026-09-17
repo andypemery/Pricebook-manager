@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, ChevronUp, Filter, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronUp, Plus, Trash2 } from "lucide-react";
 import { filterOperatorLabels, filterOperatorNeedsValue } from "@/lib/data-mapper/output-profiles/rules";
 import { filterOperators, type OutputProfileFilterDraft, type OutputProfileFilterMatchMode } from "@/lib/data-mapper/output-profiles/types";
 
@@ -19,17 +19,16 @@ export function OutputProfileFilters({ headers, filters, matchMode, canEdit, onA
     <section className="card outputProfileFilters" aria-labelledby="output-profile-filters-title">
       <div className="sectionHeader">
         <div>
-          <p className="sheetLabel">Row filters</p>
-          <h2 id="output-profile-filters-title">Include rows where {matchMode === "ALL" ? "all of the following are true" : "any of the following is true"}</h2>
-          <p className="muted">Filters may use any source heading, even if that field is not part of the output.</p>
+          <p className="sheetLabel">Row rules</p>
+          <h2 id="output-profile-filters-title">Which rows should be included?</h2>
         </div>
       </div>
 
       <label className="filterMatchMode field">
-        <span>How should multiple filters work?</span>
+        <span>Include rows where:</span>
         <select value={matchMode} disabled={!canEdit} onChange={(event) => onMatchModeChange(event.target.value as OutputProfileFilterMatchMode)}>
-          <option value="ALL">Match ALL rules</option>
-          <option value="ANY">Match ANY rule</option>
+          <option value="ALL">All rules match</option>
+          <option value="ANY">Any rule matches</option>
         </select>
       </label>
 
@@ -75,13 +74,12 @@ export function OutputProfileFilters({ headers, filters, matchMode, canEdit, onA
         </div>
       ) : (
         <div className="emptyState filterEmptyState">
-          <Filter aria-hidden="true" size={22} />
-          <div><strong>All source rows are included</strong><p className="muted">Add a filter when this profile should include only selected products.</p></div>
+          <strong>All source rows</strong>
         </div>
       )}
       {canEdit ? (
-        <button className="sheetIconButton staticPosition filterAddButton" type="button" onClick={onAdd} aria-label="Add row filter" title="Add row filter">
-          <Plus aria-hidden="true" size={16} />
+        <button className="secondary filterAddButton" type="button" onClick={onAdd} aria-label="Add row rule">
+          <Plus aria-hidden="true" size={16} /> Add rule
         </button>
       ) : null}
     </section>

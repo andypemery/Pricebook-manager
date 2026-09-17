@@ -2,12 +2,11 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 describe("compact output-generation validation review", () => {
-  it("keeps counts and bulk actions visible while detailed issues stay behind the review dialog", () => {
+  it("uses a compact readiness summary while detailed issues stay behind the review dialog", () => {
     const source = readFileSync(new URL("../components/data-mapper/output-generation-panel.tsx", import.meta.url), "utf8");
-    expect(source).toContain("Blocking errors");
-    expect(source).toContain("Ignored");
-    expect(source).toContain("Unresolved");
-    expect(source).toContain("Warnings");
+    expect(source).toContain("Ready to generate");
+    expect(source).toContain("validationCompactSummary");
+    expect(source).not.toContain('className="summaryGrid"');
     expect(source).toContain("Review validation issues");
     expect(source).toContain("reviewOpen ?");
     expect(source).toContain('role="dialog"');
@@ -26,9 +25,10 @@ describe("Output Profile field alignment", () => {
     expect(source).toContain('className="field sourceHeadingField"');
     expect(source).toContain("Source heading");
     expect(source).toContain("readOnly");
-    expect(css).toMatch(/\.outputColumnFields\s*\{[^}]*grid-template-columns:[^}]*repeat|\.outputColumnFields\s*\{[^}]*minmax\(180px/s);
+    expect(css).toMatch(/\.outputColumnFields\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/s);
+    expect(css).toMatch(/\.outputColumnsWorkspace\s*\{[^}]*grid-template-columns:\s*minmax\(0, 3fr\)\s+minmax\(270px, 1fr\)/s);
     expect(css).toContain(".sourceHeadingField > span { white-space: nowrap;");
     expect(css).toContain(".sourceHeadingField input[readonly]");
-    expect(css).toContain(".outputColumnFields { grid-template-columns: 1fr;");
+    expect(css).toContain(".outputColumnFields { display: grid; grid-template-columns: minmax(0, 1fr);");
   });
 });

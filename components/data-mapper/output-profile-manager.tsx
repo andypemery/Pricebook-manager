@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Copy, Pencil, Plus, Trash2 } from "lucide-react";
@@ -19,24 +19,39 @@ export function OutputProfileManager({
   appliedProfileId,
   sourceWorkbookImportId,
   sourceWorksheetId,
+  sourceFilename,
+  sourceWorksheetName,
   currentProfileName,
   isDirty,
   canEdit,
   isBusy,
-  onRename
+  saveMessage,
+  saveError,
+  saveLabel,
+  saveDisabled,
+  onNameChange,
+  onSave
 }: {
   profiles: OutputProfileSummary[];
   activeProfileId: string | null;
   appliedProfileId: string | null;
   sourceWorkbookImportId: string;
   sourceWorksheetId: string;
+  sourceFilename: string;
+  sourceWorksheetName: string;
   currentProfileName: string;
   isDirty: boolean;
   canEdit: boolean;
   isBusy: boolean;
-  onRename: () => void;
+  saveMessage: string | null;
+  saveError: string | null;
+  saveLabel: string;
+  saveDisabled: boolean;
+  onNameChange: (name: string) => void;
+  onSave: () => void;
 }) {
   const router = useRouter();
+  const profileNameInput = useRef<HTMLInputElement>(null);
   const [isPending, startTransition] = useTransition();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [pendingIntent, setPendingIntent] = useState<ProfileContextIntent | null>(null);
@@ -111,12 +126,24 @@ export function OutputProfileManager({
 
   return (
     <section className="card outputProfileManager" aria-labelledby="profile-manager-title">
-      <div className="sectionHeader">
-        <div>
-          <p className="sheetLabel">Current profile</p>
-          <h2 id="profile-manager-title">{currentProfileName.trim() || "New Output Profile"}</h2>
+      <div className="workspaceHeaderTop">
+        <label className="field profileNameField">
+          <span id="profile-manager-title">Output Profile name</span>
+          <input ref={profileNameInput} value={currentProfileName} onChange={(event) => onNameChange(event.target.value)} placeholder="For example, NHS Contract" maxLength={120} disabled={!canEdit || isBusy} />
+        </label>
+        <div className="workspaceSaveArea">
+          <div className="workspaceSaveStatus">
+            {isDirty ? <span className="unsavedIndicator" role="status">Unsaved changes</span> : <span className="savedIndicator" role="status">{activeProfileId ? "Saved" : "Not yet saved"}</span>}
+            {saveMessage ? <span className="success" role="status">{saveMessage}</span> : null}
+            {saveError ? <span className="error" role="alert">{saveError}</span> : null}
+          </div>
+          {canEdit ? <button className="primary" type="button" onClick={onSave} disabled={saveDisabled}>{saveLabel}</button> : <span className="badge">Read-only access</span>}
         </div>
-        <span className="badge">{profiles.length} reusable saved</span>
+      </div>
+      <div className="workspaceContext" aria-label="Current Output Profile context">
+        <div><span>Source workbook</span><strong title={sourceFilename}>{sourceFilename}</strong></div>
+        <div><span>Reference worksheet</span><strong title={sourceWorksheetName}>{sourceWorksheetName}</strong></div>
+        <div><span>Profile status</span><strong>{activeProfileId ? "Reusable saved profile" : appliedProfileId ? "Applied profile draft" : "New profile draft"}</strong></div>
       </div>
       <div className="profileManagerControls">
         <label className="field profileSelector">
@@ -134,14 +161,16 @@ export function OutputProfileManager({
             <Plus aria-hidden="true" size={16} /> New Output Profile
           </button>
           <button className="secondary" type="button" onClick={() => requestContextIntent({ type: "DUPLICATE" })} disabled={!canEdit || !activeProfileId || isPending || isBusy || confirmationOpen}>
-            <Copy aria-hidden="true" size={16} /> Duplicate Profile
+            <Copy aria-hidden="true" size={16} /> Duplicate
           </button>
-          <button className="secondary" type="button" onClick={onRename} disabled={!canEdit || isPending || isBusy || confirmationOpen}>
-            <Pencil aria-hidden="true" size={16} /> Rename Profile
+          <button className="secondary" type="button" onClick={() => { profileNameInput.current?.focus(); profileNameInput.current?.select(); }} disabled={!canEdit || isPending || isBusy || confirmationOpen}>
+            <Pencil aria-hidden="true" size={16} /> Rename
           </button>
           <button className="dangerButton" type="button" onClick={() => setConfirmingDelete(true)} disabled={!canEdit || !activeProfileId || isPending || isBusy || confirmationOpen}>
-            <Trash2 aria-hidden="true" size={16} /> Delete Profile
+            <Trash2 aria-hidden="true" size={16} /> Delete
           </button>
+          <Link className="secondary" href="/dashboard">Dashboard</Link>
+          <Link className="secondary" href="/workbook">Workbook Explorer</Link>
         </div>
       </div>
       <div className="applySavedProfile">

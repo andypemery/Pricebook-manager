@@ -1,13 +1,13 @@
 "use client";
 
-import Link from "next/link";
-import { useMemo, useRef, useState, useTransition, type DragEvent } from "react";
+import { useMemo, useState, useTransition, type DragEvent } from "react";
 import { useRouter } from "next/navigation";
-import { Check, ChevronLeft, ChevronRight, GripVertical, Plus, Save, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, GripVertical, Plus, X } from "lucide-react";
 import { OutputColumnInspector } from "@/components/data-mapper/output-column-inspector";
 import { OutputProfileFilters } from "@/components/data-mapper/output-profile-filters";
 import { OutputProfileManager } from "@/components/data-mapper/output-profile-manager";
 import { OutputProfileSettings } from "@/components/data-mapper/output-profile-settings";
+import { OutputProfileWorksheets } from "@/components/data-mapper/output-profile-worksheets";
 import { OutputGenerationPanel } from "@/components/data-mapper/output-generation-panel";
 import { useUnsavedProfileProtection } from "@/components/data-mapper/use-unsaved-profile-protection";
 import { useHorizontalPan } from "@/components/data-mapper/use-horizontal-pan";
@@ -71,7 +71,6 @@ export function OutputProfileBuilder({ source, initialDraft, profiles, initialAp
   canEdit: boolean;
 }) {
   const router = useRouter();
-  const profileNameInput = useRef<HTMLInputElement>(null);
   const [draft, setDraft] = useState(initialDraft);
   const [application, setApplication] = useState(initialApplication ?? null);
   const [savedFingerprint, setSavedFingerprint] = useState(() => outputProfileDraftFingerprint(initialDraft));
@@ -229,22 +228,19 @@ export function OutputProfileBuilder({ source, initialDraft, profiles, initialAp
         appliedProfileId={application?.profileId ?? null}
         sourceWorkbookImportId={draft.sourceWorkbookImportId}
         sourceWorksheetId={draft.sourceWorksheetId}
+        sourceFilename={source.workbookFileName}
+        sourceWorksheetName={source.worksheetName}
         currentProfileName={draft.name}
         isDirty={isDirty}
         canEdit={canEdit}
         isBusy={isSaving}
-        onRename={() => { profileNameInput.current?.focus(); profileNameInput.current?.select(); }}
+        saveMessage={message}
+        saveError={error}
+        saveLabel={isSaving ? "Saving" : draft.id ? "Save changes" : application ? "Save as new profile" : "Save draft"}
+        saveDisabled={isSaving || ((draft.id !== null || application !== null) && !isDirty)}
+        onNameChange={(name) => { setDraft((current) => ({ ...current, name })); resetSaveState(); }}
+        onSave={saveProfile}
       />
-
-      <section className="card outputProfileContext" aria-label="Current Output Profile context">
-        <div><span>Source</span><strong>{source.workbookFileName}</strong></div>
-        <div><span>Worksheet</span><strong>{source.worksheetName}</strong></div>
-        <div><span>Profile</span><strong>{application?.profileName ?? (draft.name.trim() || "New Output Profile")}</strong></div>
-        <div className="outputProfileContextActions">
-          <Link className="secondary" href="/dashboard">Back to Dashboard</Link>
-          <Link className="secondary" href="/workbook">Workbook Explorer</Link>
-        </div>
-      </section>
 
       {application ? (
         <section className="card profileCompatibility" aria-labelledby="profile-compatibility-title">
@@ -282,29 +278,26 @@ export function OutputProfileBuilder({ source, initialDraft, profiles, initialAp
         </section>
       ) : null}
 
-      <div className="card outputProfileIdentity">
-        <label className="field">
-          <span>Output Profile name</span>
-          <input ref={profileNameInput} value={draft.name} onChange={(event) => { setDraft((current) => ({ ...current, name: event.target.value })); resetSaveState(); }} placeholder="For example, NHS Contract" maxLength={120} disabled={!canInteract} />
-        </label>
-        <div className="outputProfileSaveArea">
-          {isDirty ? <span className="unsavedIndicator" role="status">Unsaved changes</span> : null}
-          {message ? <span className="success" role="status">{message}</span> : null}
-          {error ? <span className="error" role="alert">{error}</span> : null}
-          {canEdit ? (
-            <button className="primary" type="button" onClick={saveProfile} disabled={isSaving || ((draft.id !== null || application !== null) && !isDirty)}>
-              <Save aria-hidden="true" size={18} /> {isSaving ? "Saving" : draft.id ? "Save changes" : application ? "Save as new profile" : "Save draft"}
-            </button>
-          ) : <span className="badge">Read-only access</span>}
-        </div>
-      </div>
+
+      <nav className="outputStageNavigation" aria-label="Output Profile stages">
+        <a href="#build-output"><span>1</span>Build Output</a>
+        <span aria-hidden="true">·</span>
+        <a href="#rules-output"><span>2</span>Rules &amp; Output</a>
+        <span aria-hidden="true">·</span>
+        <a href="#worksheets"><span>3</span>Worksheets</a>
+        <span aria-hidden="true">·</span>
+        <a href="#generate"><span>4</span>Generate</a>
+      </nav>
+
+      <section className="outputWorkflowStage buildOutputStage" id="build-output" aria-labelledby="build-output-title">
+        <div className="workflowStageHeader"><span>1</span><div><h2 id="build-output-title">Build Output</h2><p className="muted">Choose source fields and shape the output columns.</p></div></div>
 
       <section className="card spreadsheetCard" aria-labelledby="source-sheet-title">
         <div className="sheetHeader">
           <div>
-            <p className="sheetLabel">Source sheet</p>
-            <h2 id="source-sheet-title">{source.workbookFileName}</h2>
-            <p className="muted">Worksheet: {source.worksheetName} · Drag a heading or use Add column. Used fields remain available for reuse.</p>
+            <p className="sheetLabel">Source tray</p>
+            <h2 id="source-sheet-title">Source Columns</h2>
+            <p className="muted">Drag a heading into the output or use Add column. Used fields remain available.</p>
           </div>
           <span className="badge">3-row preview</span>
         </div>
@@ -337,14 +330,15 @@ export function OutputProfileBuilder({ source, initialDraft, profiles, initialAp
         </div>
       </section>
 
-      <div className="sheetDirection" aria-hidden="true"><span>Drag headings down</span></div>
+      <div className="sheetDirection" aria-hidden="true"><span>Drag headings into the output</span></div>
 
+      <div className="outputColumnsWorkspace">
       <section className="card spreadsheetCard outputSpreadsheetCard" aria-labelledby="output-sheet-title">
         <div className="sheetHeader">
           <div>
             <p className="sheetLabel">Output sheet</p>
-            <h2 id="output-sheet-title">{draft.name.trim() || "Untitled Output Profile"}</h2>
-            <p className="muted">Arrange fields, select a heading to rename or configure it, then add source-backed or fixed-value columns as needed.</p>
+            <h2 id="output-sheet-title">Output Columns</h2>
+            <p className="muted">Arrange fields, then select a heading to configure it.</p>
           </div>
           <div className="sheetHeaderActions">
             <span className="badge">{draft.columns.length} columns</span>
@@ -439,15 +433,14 @@ export function OutputProfileBuilder({ source, initialDraft, profiles, initialAp
           </div>
         ) : null}
 
-        {selectedColumn ? (
-          <OutputColumnInspector
-            column={selectedColumn}
-            canEdit={canInteract}
-            onChange={updateSelectedColumn}
-          />
-        ) : null}
+      </section>
+        <OutputColumnInspector column={selectedColumn ?? null} canEdit={canInteract} onChange={updateSelectedColumn} />
+      </div>
       </section>
 
+      <section className="outputWorkflowStage" id="rules-output" aria-labelledby="rules-output-title">
+        <div className="workflowStageHeader"><span>2</span><div><h2 id="rules-output-title">Rules &amp; Output</h2><p className="muted">Choose which rows to include and how the files should be created.</p></div></div>
+        <div className="rulesOutputGrid">
       <OutputProfileFilters
         headers={source.headers}
         filters={draft.filters}
@@ -469,7 +462,23 @@ export function OutputProfileBuilder({ source, initialDraft, profiles, initialAp
         onChange={(changes) => { setDraft((current) => ({ ...current, ...changes })); resetSaveState(); }}
         onFilenameDateChange={setFilenameDate}
       />
-      <OutputGenerationPanel sourceWorkbookImportId={source.sourceWorkbookImportId} sourceFilename={source.workbookFileName} draft={draft} worksheets={source.workbookWorksheets ?? [{ id: source.id, name: source.worksheetName, position: 0, headers: source.headers }]} filenameDate={filenameDate} canEdit={canEdit && !isSaving} />
+        </div>
+      </section>
+
+      <section className="outputWorkflowStage" id="worksheets" aria-labelledby="worksheets-stage-title">
+        <div className="workflowStageHeader"><span>3</span><div><h2 id="worksheets-stage-title">Worksheets</h2><p className="muted">Choose the source worksheets included in this run.</p></div></div>
+        <OutputProfileWorksheets
+          profile={draft}
+          worksheets={source.workbookWorksheets ?? [{ id: source.id, name: source.worksheetName, position: 0, headers: source.headers }]}
+          canEdit={canInteract}
+          onChange={(selectedWorksheetIds) => { setDraft((current) => ({ ...current, selectedWorksheetIds })); resetSaveState(); }}
+        />
+      </section>
+
+      <section className="outputWorkflowStage" id="generate" aria-labelledby="generate-stage-title">
+        <div className="workflowStageHeader"><span>4</span><div><h2 id="generate-stage-title">Generate</h2><p className="muted">Review readiness and download the finished output.</p></div></div>
+        <OutputGenerationPanel sourceWorkbookImportId={source.sourceWorkbookImportId} sourceFilename={source.workbookFileName} draft={draft} worksheets={source.workbookWorksheets ?? [{ id: source.id, name: source.worksheetName, position: 0, headers: source.headers }]} filenameDate={filenameDate} canEdit={canEdit && !isSaving} />
+      </section>
     </section>
   );
 }

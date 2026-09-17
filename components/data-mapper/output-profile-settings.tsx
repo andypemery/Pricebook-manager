@@ -5,8 +5,7 @@ import { CalendarDays, FileOutput, Info } from "lucide-react";
 import {
   configuredWorksheetName,
   effectiveWorksheetName,
-  normaliseWorksheetIdentity,
-  outputProfileGenerationReadiness
+  normaliseWorksheetIdentity
 } from "@/lib/data-mapper/output-profiles/configuration";
 import { filenameTokenLabels, filenameTokens, resolveOutputFilename, resolveOutputPackageFilename, type FilenameToken } from "@/lib/data-mapper/output-profiles/filename";
 import type { OutputProfileDraft, SourceWorkbookWorksheet } from "@/lib/data-mapper/output-profiles/types";
@@ -82,7 +81,6 @@ export function OutputProfileSettings({
     sourceFilename,
     effectiveDate: filenameDate
   });
-  const contextualIssues = useMemo(() => outputProfileGenerationReadiness(profile, sourceFilename, filenameDate, worksheets).issues, [filenameDate, profile, sourceFilename, worksheets]);
 
   function insertToken(token: FilenameToken) {
     const input = filenameInput.current;
@@ -118,13 +116,9 @@ export function OutputProfileSettings({
     <section className="card outputProfileSettings" aria-labelledby="output-settings-title">
       <div className="sectionHeader">
         <div>
-          <p className="sheetLabel">Output settings</p>
-          <h2 id="output-settings-title">Filename, file type and worksheets</h2>
-          <p className="muted">Configure the reusable definition and choose worksheets for this generation.</p>
+          <p className="sheetLabel">File configuration</p>
+          <h2 id="output-settings-title">Output file</h2>
         </div>
-        <span className={contextualIssues.length === 0 ? "badge success" : "badge warning"}>
-          {contextualIssues.length === 0 ? "Ready" : "Needs attention"}
-        </span>
       </div>
 
       <div className="outputSettingsGrid">
@@ -146,13 +140,6 @@ export function OutputProfileSettings({
             <button type="button" className="datePickerButton" aria-label="Choose filename date" onClick={openFilenameDatePicker}><CalendarDays aria-hidden="true" size={18} /></button>
           </span>
         </label>
-        <label className="field">
-          <span>Output format</span>
-          <select value={profile.outputFormat} onChange={(event) => onChange({ outputFormat: event.target.value as OutputProfileDraft["outputFormat"] })} disabled={!canEdit}>
-            <option value="CSV">CSV</option>
-            <option value="XLSX">XLSX</option>
-          </select>
-        </label>
       </div>
 
       {worksheetMode === "SEPARATE_FILES" ? <div className="filenamePreview multiFilePreview" aria-live="polite">
@@ -162,21 +149,23 @@ export function OutputProfileSettings({
       {resolved.errors.map((error) => <p className="error" role="alert" key={error}>{error}</p>)}
       {resolved.warnings.map((warning) => <p className="warningText" key={warning}><Info aria-hidden="true" size={15} /> {warning}</p>)}
 
-      <div className="outputSettingsTwoColumn"><fieldset className="worksheetHandlingSettings">
+      <div className="outputSettingsTwoColumn">
+        <label className="field outputFormatField">
+          <span>Output format</span>
+          <select value={profile.outputFormat} onChange={(event) => onChange({ outputFormat: event.target.value as OutputProfileDraft["outputFormat"] })} disabled={!canEdit}>
+            <option value="CSV">CSV</option>
+            <option value="XLSX">XLSX</option>
+          </select>
+        </label>
+        <fieldset className="worksheetHandlingSettings">
         <legend>Worksheet handling</legend>
         <label><input type="radio" name="worksheet-mode" checked={worksheetMode === "COMBINE"} onChange={() => onChange({ worksheetMode: "COMBINE" })} disabled={!canEdit} /><span><strong>Combine all worksheets into one</strong><small>CSV or XLSX, with headings written once.</small></span></label>
         <label><input type="radio" name="worksheet-mode" checked={worksheetMode === "SEPARATE_WORKSHEETS"} onChange={() => onChange({ worksheetMode: "SEPARATE_WORKSHEETS" })} disabled={!canEdit || profile.outputFormat === "CSV"} /><span><strong>Keep source worksheets separate</strong><small>One XLSX workbook containing a tab for each selected worksheet.</small></span></label>
         <label><input type="radio" name="worksheet-mode" checked={worksheetMode === "SEPARATE_FILES"} onChange={() => onChange({ worksheetMode: "SEPARATE_FILES" })} disabled={!canEdit} /><span><strong>Create a separate file for each worksheet</strong><small>CSV or XLSX files; multiple files are returned in one ZIP.</small></span></label>
-      </fieldset>
-      {worksheetMode === "SEPARATE_WORKSHEETS" && profile.outputFormat === "CSV" ? <p className="error" role="alert">Keeping source worksheets separate requires XLSX output. Choose XLSX or another worksheet mode.</p> : null}
-      {profile.outputFormat === "XLSX" ? <section className="formatSettings" aria-label="XLSX settings">{worksheetMode === "COMBINE" ? <label className="field worksheetNameField"><span>Worksheet name (optional)</span><input value={profile.xlsxWorksheetName} onChange={(event) => onChange({ xlsxWorksheetName: event.target.value })} maxLength={31} disabled={!canEdit} placeholder={effectiveWorksheetName(profile.name, "")} /><small>The tab name inside the Excel workbook.</small></label> : <fieldset className="worksheetNamingSettings"><legend>Worksheet names</legend><label className="checkboxField"><input type="radio" name="worksheet-name-mode" checked={worksheetNameMode === "SOURCE"} onChange={() => onChange({ worksheetNameMode: "SOURCE" })} disabled={!canEdit} /><span>Keep existing worksheet names</span></label><label className="checkboxField"><input type="radio" name="worksheet-name-mode" checked={worksheetNameMode === "CUSTOM"} onChange={() => onChange({ worksheetNameMode: "CUSTOM" })} disabled={!canEdit} /><span>Use custom worksheet names</span></label>{worksheetNameMode === "CUSTOM" ? <div className="worksheetNameGrid">{worksheetStates.map((worksheet) => <label className="field" key={worksheet.id}><span>{worksheet.name}</span><input value={worksheetNameMappings[normaliseWorksheetIdentity(worksheet.name)] ?? ""} onChange={(event) => setCustomWorksheetName(worksheet.name, event.target.value)} maxLength={31} disabled={!canEdit} placeholder={worksheet.name} /></label>)}</div> : null}</fieldset>}</section> : <section className="formatSettings" aria-label="CSV settings"><label className="field"><span>Delimiter</span><select value={profile.csvDelimiter} onChange={(event) => onChange({ csvDelimiter: event.target.value as OutputProfileDraft["csvDelimiter"] })} disabled={!canEdit}>{Object.entries(delimiterLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label><label className="checkboxField"><input type="checkbox" checked={profile.csvIncludeHeader} onChange={(event) => onChange({ csvIncludeHeader: event.target.checked })} disabled={!canEdit} /><span>Include header row</span></label></section>}</div>
-
-      <div className="worksheetSelectionPanel">
-        <div className="sectionHeader compact"><div><strong>Worksheets to include</strong><p className="muted">This selection applies only to the current workbook and is not saved in the reusable profile.</p></div><div className="actions"><button className="secondary" type="button" disabled={!canEdit} onClick={() => onChange({ selectedWorksheetIds: worksheetStates.filter((worksheet) => worksheet.compatibility.compatible).map((worksheet) => worksheet.id) })}>Select all compatible</button><button className="secondary" type="button" disabled={!canEdit} onClick={() => onChange({ selectedWorksheetIds: [] })}>Clear selection</button></div></div>
-        <div className="worksheetSelectionList">{worksheetStates.map((worksheet) => <label key={worksheet.id} title={worksheet.compatibility.compatible ? worksheet.name : `${worksheet.name}: ${worksheet.compatibility.issues.join(" ")}`} className={worksheet.compatibility.compatible ? "worksheetSelection" : "worksheetSelection incompatible"}><input type="checkbox" checked={selectedWorksheetIds.includes(worksheet.id)} disabled={!canEdit || (!worksheet.compatibility.compatible && !selectedWorksheetIds.includes(worksheet.id))} onChange={(event) => onChange({ selectedWorksheetIds: event.target.checked ? [...selectedWorksheetIds, worksheet.id] : selectedWorksheetIds.filter((id) => id !== worksheet.id) })} /><span>{!worksheet.compatibility.compatible ? "⚠ " : ""}{worksheet.name}</span></label>)}</div>
+        </fieldset>
       </div>
-
-      {contextualIssues.length > 0 ? <div className="attentionList"><strong>Before this profile can be generated:</strong><ul>{[...new Set(contextualIssues)].map((issue) => <li key={issue}>{issue}</li>)}</ul></div> : null}
+      {worksheetMode === "SEPARATE_WORKSHEETS" && profile.outputFormat === "CSV" ? <p className="error" role="alert">Keeping source worksheets separate requires XLSX output. Choose XLSX or another worksheet mode.</p> : null}
+      {profile.outputFormat === "XLSX" ? <section className="formatSettings" aria-label="XLSX settings">{worksheetMode === "COMBINE" ? <label className="field worksheetNameField"><span>Worksheet name (optional)</span><input value={profile.xlsxWorksheetName} onChange={(event) => onChange({ xlsxWorksheetName: event.target.value })} maxLength={31} disabled={!canEdit} placeholder={effectiveWorksheetName(profile.name, "")} /><small>The tab name inside the Excel workbook.</small></label> : <fieldset className="worksheetNamingSettings"><legend>Worksheet names</legend><label className="checkboxField"><input type="radio" name="worksheet-name-mode" checked={worksheetNameMode === "SOURCE"} onChange={() => onChange({ worksheetNameMode: "SOURCE" })} disabled={!canEdit} /><span>Keep existing worksheet names</span></label><label className="checkboxField"><input type="radio" name="worksheet-name-mode" checked={worksheetNameMode === "CUSTOM"} onChange={() => onChange({ worksheetNameMode: "CUSTOM" })} disabled={!canEdit} /><span>Use custom worksheet names</span></label>{worksheetNameMode === "CUSTOM" ? <div className="worksheetNameGrid">{worksheetStates.map((worksheet) => <label className="field" key={worksheet.id}><span>{worksheet.name}</span><input value={worksheetNameMappings[normaliseWorksheetIdentity(worksheet.name)] ?? ""} onChange={(event) => setCustomWorksheetName(worksheet.name, event.target.value)} maxLength={31} disabled={!canEdit} placeholder={worksheet.name} /></label>)}</div> : null}</fieldset>}</section> : <section className="formatSettings" aria-label="CSV settings"><label className="field"><span>Delimiter</span><select value={profile.csvDelimiter} onChange={(event) => onChange({ csvDelimiter: event.target.value as OutputProfileDraft["csvDelimiter"] })} disabled={!canEdit}>{Object.entries(delimiterLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label><label className="checkboxField"><input type="checkbox" checked={profile.csvIncludeHeader} onChange={(event) => onChange({ csvIncludeHeader: event.target.checked })} disabled={!canEdit} /><span>Include header row</span></label></section>}
     </section>
   );
 }

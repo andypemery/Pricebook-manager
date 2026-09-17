@@ -13,12 +13,12 @@ export default async function Dashboard() {
 
   return (
     <>
-      <section className="hero">
+      <section className="hero dashboardHeader">
         <div className="splitHero">
           <div>
             <p className="breadcrumb">Axiom Data Mapper</p>
-            <h1>Continue your pricebook work</h1>
-            <p>Upload and validate a workbook, or reopen a saved Output Profile and continue where you left off.</p>
+            <h1>Dashboard</h1>
+            <p>Continue recent work or start with a new workbook.</p>
           </div>
           <div className="actions">
             <Link className="primary" href="/workbook"><Upload aria-hidden="true" size={18} />Upload workbook</Link>

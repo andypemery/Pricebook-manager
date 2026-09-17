@@ -44,12 +44,13 @@ describe("final acceptance tidy regressions", () => {
 
   it("keeps Output Settings ordered around the filename preview and exposes safe validation errors", () => {
     const settings = readFileSync(new URL("../components/data-mapper/output-profile-settings.tsx", import.meta.url), "utf8");
+    const worksheets = readFileSync(new URL("../components/data-mapper/output-profile-worksheets.tsx", import.meta.url), "utf8");
     const panel = readFileSync(new URL("../components/data-mapper/output-generation-panel.tsx", import.meta.url), "utf8");
     const route = readFileSync(new URL("../app/api/data-mapper/outputs/route.ts", import.meta.url), "utf8");
     expect(settings.indexOf("filenamePreview")).toBeLessThan(settings.indexOf("outputSettingsTwoColumn"));
     expect(settings).toContain('aria-label="CSV settings"');
     expect(settings).toContain('aria-label="XLSX settings"');
-    expect(settings).toContain('title={worksheet.compatibility.compatible');
+    expect(worksheets).toContain("const title = worksheet.compatibility.compatible");
     expect(panel).toContain("outputProfileGenerationReadiness");
     expect(panel).toContain("!readiness.ready");
     expect(route).toContain("error instanceof OutputProfileValidationError");
