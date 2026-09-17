@@ -106,6 +106,16 @@ describe("multi-worksheet output generation", () => {
       .rejects.toThrow("requires XLSX");
   });
 
+  it("returns the actionable blank-profile-name validation before validation loading or ZIP packaging", async () => {
+    const { db } = database();
+    await expect(generateOutputForTenant(db, { id: "user-1", tenantId: "tenant-1" }, {
+      ...baseInput,
+      name: "",
+      worksheetMode: "SEPARATE_FILES"
+    }, "2026-09-16")).rejects.toThrow("Enter an Output Profile name before generating.");
+    expect(loadSourceValidationState).not.toHaveBeenCalled();
+  });
+
   it("returns one ZIP of per-worksheet CSV files and adds a worksheet suffix when the token is absent", async () => {
     const { db } = database();
     const output = await generateOutputForTenant(db, { id: "user-1", tenantId: "tenant-1" }, { ...baseInput, worksheetMode: "SEPARATE_FILES" }, "2026-09-16");

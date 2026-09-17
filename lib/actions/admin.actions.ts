@@ -21,12 +21,9 @@ function safeRole(value: FormDataEntryValue | null): UserRole {
   return customerRoles.includes(role as (typeof customerRoles)[number]) ? role : "VIEW_ONLY";
 }
 
-function permissionsFromForm(formData: FormData): Record<string, boolean> {
+function matrixPermissionsFromForm(formData: FormData, role: UserRole): Record<string, boolean> {
   const permissions: Record<string, boolean> = {};
-  for (const key of permissionKeys) {
-    if (key === "manageAxiomControls") continue;
-    permissions[key] = formData.get(key) === "on";
-  }
+  for (const key of permissionKeys) permissions[key] = key !== "manageAxiomControls" && formData.get(`permission:${role}:${key}`) === "on";
   return permissions;
 }
 
@@ -142,19 +139,19 @@ export async function resendUserInviteAction(formData: FormData) {
 export async function updateRoleTemplateAction(formData: FormData) {
   const actor = await requireUser();
   if (!hasPermission(actor, "manageCustomerUsers")) return { error: "You do not have permission." };
-  const role = safeRole(formData.get("role"));
-  const displayName = role === "CUSTOMER_ADMIN" ? "Admin" : role === "SUPER_USER" ? "Super User" : "View Only";
-  const permissions = permissionsFromForm(formData);
-  permissions.manageAxiomControls = false;
-
-  await prisma.roleTemplate.upsert({
+  const templateUpdates = customerRoles.map((role) => ({
+    role,
+    displayName: role === "CUSTOMER_ADMIN" ? "Admin" : role === "SUPER_USER" ? "Super User" : "View Only",
+    permissions: matrixPermissionsFromForm(formData, role)
+  }));
+  await prisma.$transaction(templateUpdates.map(({ role, displayName, permissions }) => prisma.roleTemplate.upsert({
     where: { tenantId_role: { tenantId: actor.tenantId, role } },
     update: { permissions, displayName, nameLocked: true, updatedById: actor.id },
     create: { tenantId: actor.tenantId, role, displayName, permissions, nameLocked: true, updatedById: actor.id }
-  });
-  await audit({ tenantId: actor.tenantId, userId: actor.id, action: "ROLE_TEMPLATE_UPDATED", entityType: "RoleTemplate", entityId: role, after: permissions });
+  })));
+  await audit({ tenantId: actor.tenantId, userId: actor.id, action: "ROLE_TEMPLATE_UPDATED", entityType: "RoleTemplate", entityId: "CUSTOMER_ROLE_MATRIX", after: Object.fromEntries(templateUpdates.map(({ role, permissions }) => [role, permissions])) });
   revalidatePath("/admin/users/role-templates");
-  return { success: "Role template updated." };
+  return { success: "Role templates updated." };
 }
 
 export async function updateAppearanceAction(formData: FormData) {

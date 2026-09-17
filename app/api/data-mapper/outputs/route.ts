@@ -5,6 +5,7 @@ import { generateOutputForTenant, OutputGenerationError, SourceWorkbookUnavailab
 import type { GenerateOutputProfileInput } from "@/lib/data-mapper/output-profiles/types";
 import { hasPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
+import { OutputProfileValidationError } from "@/lib/data-mapper/output-profiles/validation";
 
 export const runtime = "nodejs";
 
@@ -18,6 +19,7 @@ export async function POST(request: Request) {
     await audit({ tenantId: actor.tenantId, userId: actor.id, action: "OUTPUT_FILE_GENERATED", entityType: "SourceWorkbookImport", entityId: body.draft.sourceWorkbookImportId, after: { rowCount: output.rowCount, worksheetCount: output.worksheetCount, zeroRowWorksheetCount: output.zeroRowWorksheetNames.length, outputFormat: body.draft.outputFormat, ignoredBlockingCount: output.ignoredBlockingCount } });
     return new NextResponse(output.bytes, { headers: { "Content-Type": output.contentType, "Content-Disposition": `attachment; filename="${output.fileName.replaceAll('"', "")}"`, "X-Generated-Row-Count": String(output.rowCount), "X-Generated-Worksheet-Count": String(output.worksheetCount), "X-Zero-Row-Worksheets": encodeURIComponent(output.zeroRowWorksheetNames.join("|")), "X-Ignored-Blocking-Errors": String(output.ignoredBlockingCount), "Cache-Control": "no-store" } });
   } catch (error) {
+    if (error instanceof OutputProfileValidationError) return NextResponse.json({ error: error.message }, { status: 422 });
     if (error instanceof OutputGenerationError || error instanceof SourceWorkbookUnavailableError) return NextResponse.json({ error: error.message }, { status: 409 });
     console.error("[Pricebook Manager] Output generation failed", error);
     return NextResponse.json({ error: "The output file could not be generated. Please try again." }, { status: 500 });

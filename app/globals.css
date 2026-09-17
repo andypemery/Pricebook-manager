@@ -542,21 +542,16 @@ p { line-height: 1.6; }
 .checkboxGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px 16px; margin: 12px 0; }
 .checkboxLine { display: flex; gap: 8px; align-items: center; }
 .rowActions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.roleTemplateGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); gap: 16px; margin-bottom: 20px; }
-.roleTemplateCard { min-width: 0; border: 1px solid var(--border-soft); border-radius: var(--radius-lg); background: var(--card-gradient); box-shadow: var(--shadow-soft); overflow: hidden; }
-.roleTemplateSummary { min-height: 250px; padding: 20px; display: flex; flex-direction: column; gap: 13px; cursor: pointer; list-style: none; }
-.roleTemplateSummary::-webkit-details-marker { display: none; }
-.roleTemplateSummary:focus-visible { outline: 2px solid var(--axiom-aqua); outline-offset: -4px; }
-.roleTemplateHeading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-.roleTemplateHeading strong, .roleTemplateHeading small { display: block; }
-.roleTemplateHeading strong { font-size: 1.12rem; }
-.roleTemplateHeading small { margin-top: 5px; color: var(--text-muted); font-size: 0.72rem; font-weight: 800; letter-spacing: 0.05em; }
-.roleTemplatePermissionCount { font-weight: 800; }
-.roleTemplatePermissionPreview { color: var(--text-muted); line-height: 1.45; }
-.roleTemplateAction { width: fit-content; margin-top: auto; color: var(--axiom-blue); font-weight: 800; }
-.roleTemplateAction::after { content: " +"; }
-.roleTemplateCard[open] .roleTemplateAction::after { content: " −"; }
-.roleTemplateEditor { padding: 0 20px 20px; border-top: 1px solid var(--border-soft); }
+.roleTemplateMatrix { display: grid; gap: 16px; margin-bottom: 20px; }
+.roleTemplateMatrixScroll { overflow-x: auto; border: 1px solid var(--border-soft); border-radius: var(--radius-lg); background: var(--surface-panel); }
+.roleTemplateMatrixScroll:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.roleTemplateMatrix table { width: 100%; min-width: 650px; border-collapse: separate; border-spacing: 0; }
+.roleTemplateMatrix th, .roleTemplateMatrix td { padding: 12px 16px; border-bottom: 1px solid var(--border-soft); text-align: center; }
+.roleTemplateMatrix thead th { position: sticky; top: 0; z-index: 2; background: var(--surface-card); font-weight: 800; }
+.roleTemplateMatrix th:first-child { position: sticky; left: 0; z-index: 3; min-width: 235px; text-align: left; background: var(--surface-card); }
+.roleTemplateMatrix tbody th { font-weight: 700; }
+.roleTemplateMatrix tbody tr:last-child th, .roleTemplateMatrix tbody tr:last-child td { border-bottom: 0; }
+.roleTemplateMatrix input { width: 18px; height: 18px; accent-color: var(--axiom-aqua); }
 
 .loginWrap {
   min-height: 100vh;
@@ -1260,6 +1255,7 @@ p { line-height: 1.6; }
 .negativeSampleWarning span { color: var(--text-muted); }
 .outputProfileSettings { margin-top: 20px; }
 .outputSettingsGrid { display: grid; grid-template-columns: minmax(280px, 2fr) minmax(190px, 1fr) minmax(190px, 1fr) minmax(160px, 0.8fr); gap: 14px; align-items: end; }
+.outputSettingsTwoColumn { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; margin-top: 18px; }
 .outputSettingsGrid .field, .formatSettings .field { margin: 0; }
 .dateInputWrap { display: flex; width: 100%; }
 .dateInputWrap input { flex: 1 1 auto; min-width: 0; border-radius: 12px 0 0 12px; }
@@ -1294,7 +1290,7 @@ p { line-height: 1.6; }
 .filenamePreview span { color: var(--text-muted); font-size: 0.78rem; font-weight: 800; text-transform: uppercase; }
 .filenamePreview strong { overflow-wrap: anywhere; }
 .multiFilePreview small { color: var(--text-muted); overflow-wrap: anywhere; }
-.worksheetHandlingSettings, .worksheetNamingSettings { display: grid; gap: 10px; margin: 18px 0 0; padding: 16px; border: 1px solid var(--border-soft); border-radius: 12px; }
+.worksheetHandlingSettings, .worksheetNamingSettings { display: grid; gap: 10px; margin: 0; padding: 16px; border: 1px solid var(--border-soft); border-radius: 12px; }
 .worksheetHandlingSettings legend, .worksheetNamingSettings legend { padding: 0 6px; font-weight: 800; }
 .worksheetHandlingSettings > label { display: flex; align-items: flex-start; gap: 10px; }
 .worksheetHandlingSettings input { margin-top: 3px; accent-color: var(--axiom-aqua); }
@@ -1303,10 +1299,9 @@ p { line-height: 1.6; }
 .worksheetSelectionPanel { margin-top: 18px; padding: 16px; border: 1px solid var(--border-soft); border-radius: 12px; background: var(--surface-panel); }
 .worksheetSelectionPanel .sectionHeader.compact { align-items: flex-start; padding: 0 0 12px; background: transparent; }
 .worksheetSelectionPanel p { margin: 4px 0 0; }
-.worksheetSelectionList { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 9px; }
-.worksheetSelection { display: flex; align-items: flex-start; gap: 9px; padding: 10px; border: 1px solid var(--border-soft); border-radius: 10px; }
-.worksheetSelection > span { min-width: 0; display: grid; gap: 3px; }
-.worksheetSelection strong, .worksheetSelection small { overflow-wrap: anywhere; }
+.worksheetSelectionList { display: flex; flex-wrap: wrap; gap: 8px; }
+.worksheetSelection { display: inline-flex; max-width: min(100%, 280px); align-items: center; gap: 7px; padding: 7px 10px; border: 1px solid var(--border-soft); border-radius: 999px; cursor: pointer; }
+.worksheetSelection > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .worksheetSelection.incompatible { opacity: 0.72; }
 .worksheetNameGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
 .worksheetNameGrid .field { margin: 0; }
@@ -1319,7 +1314,7 @@ p { line-height: 1.6; }
 .validationReviewTable th:first-child, .validationReviewTable td:first-child { min-width: 48px; width: 48px; text-align: center; }
 .validationReviewTable tr.ignored td { opacity: 0.78; }
 .warningText { display: flex; align-items: center; gap: 7px; color: #fbbf24; }
-.formatSettings { display: grid; grid-template-columns: repeat(2, minmax(180px, 1fr)); gap: 14px; align-items: end; margin-top: 18px; }
+.formatSettings { display: grid; grid-template-columns: repeat(2, minmax(180px, 1fr)); gap: 14px; align-items: end; margin: 0; padding: 16px; border: 1px solid var(--border-soft); border-radius: 12px; }
 .worksheetNameField { max-width: 440px; }
 .worksheetNameField small { color: var(--text-muted); line-height: 1.4; }
 .checkboxField { min-height: 43px; display: flex; align-items: center; gap: 9px; font-weight: 700; }
@@ -1382,7 +1377,7 @@ p { line-height: 1.6; }
   .validationReviewBackdrop { padding: 10px; }
   .outputProfileIdentity, .sheetHeader { align-items: stretch; flex-direction: column; }
   .outputProfileSaveArea { justify-content: flex-start; }
-  .outputProfileWorkspaceGrid, .filterRule, .profileManagerControls, .applySavedProfile, .outputProfileContext, .outputSettingsGrid, .formatSettings, .outputColumnFields { grid-template-columns: 1fr; }
+  .outputProfileWorkspaceGrid, .filterRule, .profileManagerControls, .applySavedProfile, .outputProfileContext, .outputSettingsGrid, .outputSettingsTwoColumn, .formatSettings, .outputColumnFields { grid-template-columns: 1fr; }
   .outputProfileContextActions { justify-content: flex-start; }
   .profileManagerActions { justify-content: flex-start; }
   .deleteConfirmation, .discardConfirmation { align-items: flex-start; flex-direction: column; }

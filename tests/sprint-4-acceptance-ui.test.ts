@@ -219,7 +219,8 @@ describe("Sprint 4 acceptance filter and output settings UI", () => {
     expect(markup).toContain("Worksheets to include");
     expect(markup).toContain("This selection applies only to the current workbook");
     expect(markup).toContain("Software");
-    expect(markup).toContain("Needs attention");
+    expect(markup).toContain("⚠ Software");
+    expect(markup).toContain('title="Software: Missing source heading');
     expect(markup).toContain("NHS_September_2026.zip");
     expect(markup).toContain("NHS_September_2026_HP.csv");
     expect(markup).toContain("NHS_September_2026_Canon.csv");

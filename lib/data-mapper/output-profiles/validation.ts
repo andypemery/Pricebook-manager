@@ -82,6 +82,7 @@ export function validateOutputProfileInput(
 ) {
   if (!input || typeof input !== "object") throw new OutputProfileValidationError("Output Profile configuration is required.");
   const id = input.id === null || input.id === undefined ? null : requiredText(input.id, "Output Profile", 100);
+  if (typeof input.name !== "string" || !input.name.trim()) throw new OutputProfileValidationError("Enter an Output Profile name before generating.");
   const name = requiredText(input.name, "Profile name", maximumProfileNameLength);
   const outputFormat = oneOf(input.outputFormat, outputFormats, "Output format");
   const worksheetMode = oneOf(input.worksheetMode ?? "COMBINE", worksheetModes, "Worksheet handling");

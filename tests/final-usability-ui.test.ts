@@ -24,21 +24,22 @@ describe("final Sprint 4 settings usability", () => {
     expect(actions).toContain('revalidatePath("/admin/users/role-templates")');
   });
 
-  it("renders the three standard templates as responsive summary cards with an editor", () => {
+  it("renders the three standard templates as one scrollable permission matrix", () => {
     const markup = renderToStaticMarkup(createElement(RoleTemplateGrid, {
       templates: [{ role: "VIEW_ONLY", permissions: { viewRecords: true, raiseSupportTickets: true } }]
     }));
     const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
 
-    expect(markup.match(/class="roleTemplateCard"/g)).toHaveLength(3);
+    expect(markup).toContain('class="roleTemplateMatrix"');
+    expect(markup).toContain('class="roleTemplateMatrixScroll"');
+    expect(markup).toContain("<table");
     expect(markup).toContain("View Only");
     expect(markup).toContain("Super User");
     expect(markup).toContain("Admin");
-    expect(markup).toContain("Locked identity");
-    expect(markup).toContain("customer permissions enabled");
-    expect(markup.match(/Edit template/g)).toHaveLength(3);
-    expect(markup).toContain("Save View Only template");
-    expect(css).toMatch(/\.roleTemplateGrid\s*\{[^}]*repeat\(auto-fit, minmax\(min\(320px, 100%\), 1fr\)\)/s);
+    expect(markup).toContain("Save role templates");
+    expect(markup).toContain("View records for View Only");
+    expect(markup).not.toContain("Manage Axiom controls");
+    expect(css).toMatch(/\.roleTemplateMatrixScroll\s*\{[^}]*overflow-x:\s*auto/s);
   });
 
   it("exposes both Add column choices without replacing heading drag-to-add", () => {

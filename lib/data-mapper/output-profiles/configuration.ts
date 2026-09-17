@@ -1,6 +1,7 @@
 import { resolveOutputFilename } from "@/lib/data-mapper/output-profiles/filename";
 import type { OutputProfileDraft } from "@/lib/data-mapper/output-profiles/types";
 import { normaliseSourceHeading } from "@/lib/data-mapper/output-profiles/compatibility";
+import { resolveWorksheetCompatibility } from "@/lib/data-mapper/output-profiles/worksheet-compatibility";
 
 const invalidWorksheetCharacters = /[\\/*?:\[\]]/;
 const invalidWorksheetCharactersGlobal = /[\\/*?:\[\]]/g;
@@ -53,7 +54,7 @@ export function outputProfileAttentionIssues(
   effectiveDate: string
 ) {
   const issues: string[] = [];
-  if (!profile.name.trim()) issues.push("Add a profile name.");
+  if (!profile.name.trim()) issues.push("Enter an Output Profile name before generating. You do not need to save the profile first.");
   if (profile.columns.length === 0) issues.push("Add at least one output column.");
   const unresolvedOutputFields = profile.columns.filter((column) => column.columnType === "SOURCE" && column.sourceColumnIndex === null).length;
   const unresolvedFilterFields = profile.filters.filter((filter) => filter.sourceColumnIndex === null).length;
@@ -78,4 +79,27 @@ export function outputProfileAttentionIssues(
     issues.push("Keeping source worksheets separate requires XLSX output.");
   }
   return [...new Set(issues)];
+}
+
+export function outputProfileGenerationReadiness(
+  profile: OutputProfileDraft,
+  sourceFilename: string,
+  effectiveDate: string,
+  worksheets: ReadonlyArray<{ id: string; name: string; headers: string[] }>,
+  unresolvedBlockingCount = 0
+) {
+  const selectedWorksheetIds = profile.selectedWorksheetIds ?? [profile.sourceWorksheetId];
+  const selected = worksheets.filter((worksheet) => selectedWorksheetIds.includes(worksheet.id));
+  const issues = [
+    ...outputProfileAttentionIssues(profile, sourceFilename, effectiveDate),
+    ...(selectedWorksheetIds.length === 0 ? ["Select at least one worksheet to include."] : []),
+    ...(selected.length !== selectedWorksheetIds.length ? ["One or more selected worksheets are not available."] : []),
+    ...selected.flatMap((worksheet) => {
+      const compatibility = resolveWorksheetCompatibility(profile, worksheet.headers);
+      return compatibility.compatible ? [] : [`${worksheet.name}: ${compatibility.issues.join(" ")}`];
+    }),
+    ...((profile.worksheetMode ?? "COMBINE") === "COMBINE" ? [] : validateWorksheetNames(selected.map((worksheet) => configuredWorksheetName(profile, worksheet.name)))),
+    ...(unresolvedBlockingCount > 0 ? [`Resolve or ignore the remaining ${unresolvedBlockingCount} blocking ${unresolvedBlockingCount === 1 ? "error" : "errors"} before generating this file.`] : [])
+  ];
+  return { issues: [...new Set(issues)], ready: issues.length === 0 };
 }
