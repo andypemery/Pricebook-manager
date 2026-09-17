@@ -154,4 +154,30 @@ describe("reusable Output Profile heading compatibility", () => {
       .toEqual(profile.filters.map(({ operator, comparisonValue }) => ({ operator, comparisonValue })));
     expect(JSON.stringify(profile)).toBe(before);
   });
+
+  it("retains duplicated source-backed columns when a saved profile is applied again", () => {
+    const profile = reusableProfile();
+    profile.columns.splice(3, 0, {
+      clientId: "sale-price",
+      columnType: "SOURCE",
+      sourceColumnIndex: 2,
+      sourceHeading: "Sell price",
+      outputHeading: "Sale Price",
+      staticValue: "",
+      adjustmentType: "MULTIPLY",
+      adjustmentValue: "1.25",
+      roundingDecimalPlaces: 2
+    });
+    const result = applyReusableProfileToSource({
+      profile,
+      currentSource: source(["SKU", "Description", "Sell price", "Eligible"], [["A", "Printer", "100.00", "Yes"]]),
+      originWorkbookFileName: "August.xlsx",
+      originWorksheetName: "Products"
+    });
+    const priceColumns = result.draft.columns.filter((column) => column.sourceHeading === "Sell price");
+
+    expect(priceColumns).toHaveLength(2);
+    expect(priceColumns.map((column) => column.sourceColumnIndex)).toEqual([2, 2]);
+    expect(priceColumns[1]).toMatchObject({ outputHeading: "Sale Price", adjustmentType: "MULTIPLY", adjustmentValue: "1.25", roundingDecimalPlaces: 2 });
+  });
 });

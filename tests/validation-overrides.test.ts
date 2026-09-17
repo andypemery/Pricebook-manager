@@ -1,13 +1,13 @@
 import ExcelJS from "exceljs";
 import type { PrismaClient } from "@prisma/client";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const storage = vi.hoisted(() => ({ get: vi.fn() }));
 vi.mock("../lib/data-mapper/source-workbook-storage", () => ({ getSourceWorkbookStorage: () => storage }));
 
 import { changeValidationIssueOverrides, loadSourceValidationState } from "../lib/data-mapper/validation-overrides";
 
-beforeAll(async () => {
+beforeEach(async () => {
   const workbook = new ExcelJS.Workbook();
   workbook.addWorksheet("Products").addRows([
     ["SKU", "Item description", "Cost price", "Sell price", "Framework", "Partner"],
@@ -55,5 +55,31 @@ describe("tenant-scoped validation overrides", () => {
     await expect(changeValidationIssueOverrides(db, { id: "user-1", tenantId: "tenant-1" }, "source-1", ["manufactured"], "IGNORE"))
       .rejects.toThrow("do not belong to this current source workbook");
     expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it("ignores duplicate occurrences independently and supports bulk Ignore and Restore", async () => {
+    const workbook = new ExcelJS.Workbook();
+    workbook.addWorksheet("Products").addRows([
+      ["SKU", "Item description", "Cost price", "Sell price", "Framework", "Partner"],
+      ["DUP-1", "Alpha", "10", "20", "NHS", "Supplier"],
+      ["DUP-1", "Beta", "12", "24", "NHS", "Supplier"]
+    ]);
+    storage.get.mockResolvedValue(new Uint8Array(await workbook.xlsx.writeBuffer()));
+    const { db } = database();
+    const initial = await loadSourceValidationState(db, "tenant-1", "source-1");
+    const duplicateFingerprints = initial.issues.filter((issue) => issue.category === "duplicate-sku").map((issue) => issue.fingerprint);
+
+    expect(duplicateFingerprints).toHaveLength(2);
+    expect(new Set(duplicateFingerprints).size).toBe(2);
+
+    const oneIgnored = await changeValidationIssueOverrides(db, { id: "user-1", tenantId: "tenant-1" }, "source-1", [duplicateFingerprints[0]], "IGNORE");
+    expect(oneIgnored).toMatchObject({ blockingCount: 2, ignoredBlockingCount: 1, unresolvedBlockingCount: 1 });
+    expect(oneIgnored.issues.find((issue) => issue.fingerprint === duplicateFingerprints[1])?.ignored).toBe(false);
+
+    const allIgnored = await changeValidationIssueOverrides(db, { id: "user-1", tenantId: "tenant-1" }, "source-1", duplicateFingerprints, "IGNORE");
+    expect(allIgnored).toMatchObject({ ignoredBlockingCount: 2, unresolvedBlockingCount: 0 });
+
+    const oneRestored = await changeValidationIssueOverrides(db, { id: "user-1", tenantId: "tenant-1" }, "source-1", [duplicateFingerprints[0]], "RESTORE");
+    expect(oneRestored).toMatchObject({ ignoredBlockingCount: 1, unresolvedBlockingCount: 1 });
   });
 });

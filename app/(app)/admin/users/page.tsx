@@ -37,7 +37,7 @@ export default async function Users({ searchParams }: { searchParams?: Promise<{
     <>
       <section className="hero splitHero">
         <div>
-          <p className="breadcrumb">Account › Users & Permissions</p>
+          <p className="breadcrumb">Settings › Users</p>
           <h1>Users & Permissions</h1>
           <p>Manage user access. New users receive a 24-hour invite link and set their own password.</p>
         </div>
@@ -45,6 +45,7 @@ export default async function Users({ searchParams }: { searchParams?: Promise<{
           <div className="actions">
             <Link className="primary" href="/admin/users/new">Add user</Link>
             <Link className="secondary" href="/admin/users/import">Import users</Link>
+            <Link className="secondary" href="/admin/users/role-templates">Role Templates</Link>
             <a className="secondary" href="/api/users/import-template">Download import template</a>
           </div>
         ) : null}

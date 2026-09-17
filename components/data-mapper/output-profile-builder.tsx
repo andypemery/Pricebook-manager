@@ -10,6 +10,7 @@ import { OutputProfileManager } from "@/components/data-mapper/output-profile-ma
 import { OutputProfileSettings } from "@/components/data-mapper/output-profile-settings";
 import { OutputGenerationPanel } from "@/components/data-mapper/output-generation-panel";
 import { useUnsavedProfileProtection } from "@/components/data-mapper/use-unsaved-profile-protection";
+import { useHorizontalPan } from "@/components/data-mapper/use-horizontal-pan";
 import { saveOutputProfileAction } from "@/lib/actions/output-profile.actions";
 import { manuallyResolveProfileField } from "@/lib/data-mapper/output-profiles/compatibility";
 import {
@@ -77,6 +78,8 @@ export function OutputProfileBuilder({ source, initialDraft, profiles, initialAp
   const [filenameDate, setFilenameDate] = useState(initialEffectiveDate);
   const [dragState, setDragState] = useState<{ kind: "source" } | { kind: "output"; clientId: string } | null>(null);
   const [insertionIndex, setInsertionIndex] = useState<number | null>(null);
+  const [addColumnMode, setAddColumnMode] = useState<"CHOICES" | "SOURCE" | null>(null);
+  const [sourceColumnToAdd, setSourceColumnToAdd] = useState(0);
   const [selectedColumnId, setSelectedColumnId] = useState<string | null>(initialDraft.columns[0]?.clientId ?? null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -93,6 +96,8 @@ export function OutputProfileBuilder({ source, initialDraft, profiles, initialAp
   const selectedColumn = selectedColumnIndex >= 0 ? draft.columns[selectedColumnIndex] : null;
   const isDragging = dragState !== null;
   const unresolvedCompatibilityFields = application?.fields.filter((field) => field.sourceColumnIndex === null) ?? [];
+  const sourceSheetPan = useHorizontalPan<HTMLDivElement>();
+  const outputSheetPan = useHorizontalPan<HTMLDivElement>();
 
   function resetSaveState() {
     setMessage(null);
@@ -116,7 +121,13 @@ export function OutputProfileBuilder({ source, initialDraft, profiles, initialAp
     const clientId = newClientId();
     setDraft((current) => ({ ...current, columns: addStaticColumn(current.columns, clientId) }));
     setSelectedColumnId(clientId);
+    setAddColumnMode(null);
     resetSaveState();
+  }
+
+  function addChosenSourceColumn() {
+    addColumn(sourceColumnToAdd);
+    setAddColumnMode(null);
   }
 
   function moveColumn(clientId: string, targetIndex: number) {
@@ -293,11 +304,11 @@ export function OutputProfileBuilder({ source, initialDraft, profiles, initialAp
           <div>
             <p className="sheetLabel">Source sheet</p>
             <h2 id="source-sheet-title">{source.workbookFileName}</h2>
-            <p className="muted">Worksheet: {source.worksheetName} · Drag a heading or use Add. Used fields remain available for reuse.</p>
+            <p className="muted">Worksheet: {source.worksheetName} · Drag a heading or use Add column. Used fields remain available for reuse.</p>
           </div>
           <span className="badge">3-row preview</span>
         </div>
-        <div className="outputSheetScroll">
+        <div {...sourceSheetPan.handlers} aria-label="Source Sheet horizontal preview" className={`outputSheetScroll horizontalPanSurface${sourceSheetPan.isPanning ? " isPanning" : ""}`} tabIndex={0}>
           <table className="builderSheet sourceBuilderSheet">
             <thead>
               <tr>
@@ -333,14 +344,40 @@ export function OutputProfileBuilder({ source, initialDraft, profiles, initialAp
           <div>
             <p className="sheetLabel">Output sheet</p>
             <h2 id="output-sheet-title">{draft.name.trim() || "Untitled Output Profile"}</h2>
-            <p className="muted">Arrange fields, select a heading to rename or configure it, then add fixed values and filters if needed.</p>
+            <p className="muted">Arrange fields, select a heading to rename or configure it, then add source-backed or fixed-value columns as needed.</p>
           </div>
           <div className="sheetHeaderActions">
             <span className="badge">{draft.columns.length} columns</span>
-            {canInteract ? <button className="secondary" type="button" onClick={addFixedColumn}><Plus aria-hidden="true" size={16} /> Add fixed column</button> : null}
+            {canInteract ? <button className="secondary" type="button" aria-expanded={addColumnMode !== null} onClick={() => setAddColumnMode((current) => current === null ? "CHOICES" : null)}><Plus aria-hidden="true" size={16} /> Add column</button> : null}
           </div>
         </div>
-        <div className={`${draft.columns.length === 0 ? "outputSheetScroll emptyOutputDropzone" : "outputSheetScroll"}${isDragging ? " dragTargetActive" : ""}`} onDragOver={(event) => { if (canInteract) event.preventDefault(); }} onDrop={(event) => dropAtInsertion(event, insertionIndex ?? draft.columns.length)}>
+        {addColumnMode ? (
+          <section className="addColumnPanel" aria-label="Add column">
+            {addColumnMode === "CHOICES" ? (
+              <>
+                <div><strong>Choose column type</strong><span>Reuse a source field with adjustments, or add a fixed value.</span></div>
+                <div className="actions">
+                  <button className="secondary" type="button" onClick={() => setAddColumnMode("SOURCE")}>From source field</button>
+                  <button className="secondary" type="button" onClick={addFixedColumn}>Fixed value</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <label className="field addSourceColumnField">
+                  <span>Source field</span>
+                  <select value={sourceColumnToAdd} onChange={(event) => setSourceColumnToAdd(Number(event.target.value))}>
+                    {source.headers.map((heading, index) => <option value={index} key={`${heading}-${index}`}>Column {index + 1} · {heading}</option>)}
+                  </select>
+                </label>
+                <div className="actions">
+                  <button className="primary" type="button" onClick={addChosenSourceColumn} disabled={source.headers.length === 0}>Add source column</button>
+                  <button className="secondary" type="button" onClick={() => setAddColumnMode("CHOICES")}>Back</button>
+                </div>
+              </>
+            )}
+          </section>
+        ) : null}
+        <div {...outputSheetPan.handlers} aria-label="Output Sheet horizontal preview" className={`${draft.columns.length === 0 ? "outputSheetScroll emptyOutputDropzone" : "outputSheetScroll"} horizontalPanSurface${isDragging ? " dragTargetActive" : ""}${outputSheetPan.isPanning ? " isPanning" : ""}`} onDragOver={(event) => { if (canInteract) event.preventDefault(); }} onDrop={(event) => dropAtInsertion(event, insertionIndex ?? draft.columns.length)} tabIndex={0}>
           {draft.columns.length > 0 ? (
             <table className="builderSheet outputBuilderSheet">
               <thead>
@@ -384,7 +421,7 @@ export function OutputProfileBuilder({ source, initialDraft, profiles, initialAp
               </tbody>
             </table>
           ) : (
-            <div className="emptyOutputMessage"><Plus aria-hidden="true" size={24} /><strong>Drop a source heading here</strong><span>Or add a fixed column for values such as CURRENCY or CONTRACT.</span></div>
+            <div className="emptyOutputMessage"><Plus aria-hidden="true" size={24} /><strong>Drop a source heading here</strong><span>Or use Add column to reuse a source field or add a fixed value.</span></div>
           )}
         </div>
 

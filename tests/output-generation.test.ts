@@ -63,6 +63,27 @@ describe("multi-worksheet output generation", () => {
     expect(loadSourceValidationState).toHaveBeenCalledTimes(1);
   });
 
+  it("generates CSV and XLSX with original and multiplied columns from the same source field", async () => {
+    const duplicatedPriceInput = {
+      ...baseInput,
+      csvDelimiter: "COMMA" as const,
+      selectedWorksheetIds: ["worksheet-1"],
+      filters: [],
+      columns: [
+        { ...baseInput.columns[1], outputHeading: "Cost Price", adjustmentType: "NONE" as const, adjustmentValue: "", roundingDecimalPlaces: null },
+        { ...baseInput.columns[1], outputHeading: "Sale Price", adjustmentType: "MULTIPLY" as const, adjustmentValue: "1.25", roundingDecimalPlaces: 2 as const }
+      ]
+    };
+    const csv = await generateOutputForTenant(database().db, { id: "user-1", tenantId: "tenant-1" }, duplicatedPriceInput, "2026-09-16");
+    expect(new TextDecoder().decode(csv.bytes)).toBe("Cost Price,Sale Price\r\n10,12.50\r\n20,25.00");
+
+    const xlsx = await generateOutputForTenant(database().db, { id: "user-1", tenantId: "tenant-1" }, { ...duplicatedPriceInput, outputFormat: "XLSX" }, "2026-09-16");
+    const parsed = new ExcelJS.Workbook();
+    await parsed.xlsx.load(xlsx.bytes);
+    expect(parsed.worksheets[0].getRow(1).values).toEqual([undefined, "Cost Price", "Sale Price"]);
+    expect(parsed.worksheets[0].getRow(2).values).toEqual([undefined, "10", "12.50"]);
+  });
+
   it("keeps selected worksheets as separately named tabs in one XLSX", async () => {
     const { db } = database();
     const output = await generateOutputForTenant(db, { id: "user-1", tenantId: "tenant-1" }, {

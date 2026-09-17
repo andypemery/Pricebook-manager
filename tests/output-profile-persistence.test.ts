@@ -167,6 +167,26 @@ describe("Output Profile persistence", () => {
     ]);
   });
 
+  it("persists two independently configured columns backed by the same source field", async () => {
+    const create = vi.fn().mockResolvedValue({ id: "profile-derived", name: "Retail", updatedAt: new Date() });
+    const db = {
+      sourceWorksheet: { findFirst: vi.fn().mockResolvedValue({ headers: ["Product Code", "Cost Price"], sourceWorkbookImport: { originalFileName: "pricebook.xlsx" } }) },
+      outputProfile: { create }
+    } as unknown as PrismaClient;
+
+    await saveOutputProfileForTenant(db, actor, profileInput({
+      columns: [
+        sourceColumn(1, "Cost Price", "Cost Price"),
+        sourceColumn(1, "Cost Price", "Sale Price", { adjustmentType: "MULTIPLY", adjustmentValue: "1.25", roundingDecimalPlaces: 2 })
+      ]
+    }));
+
+    expect(create.mock.calls[0]?.[0].data.columns.create).toEqual([
+      expect.objectContaining({ position: 0, sourceColumnIndex: 1, sourceHeading: "Cost Price", outputHeading: "Cost Price", adjustmentType: "NONE" }),
+      expect.objectContaining({ position: 1, sourceColumnIndex: 1, sourceHeading: "Cost Price", outputHeading: "Sale Price", adjustmentType: "MULTIPLY", adjustmentValue: "1.25", roundingDecimalPlaces: 2 })
+    ]);
+  });
+
   it("reloads only headings, three-row preview metadata and compact profile configuration", async () => {
     const findFirst = vi.fn().mockResolvedValue({
       id: "profile-1",

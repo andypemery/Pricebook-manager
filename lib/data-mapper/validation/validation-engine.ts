@@ -31,6 +31,7 @@ const headerAliases = {
 
 type HeaderKey = keyof typeof headerAliases;
 type HeaderMap = Partial<Record<HeaderKey, number>>;
+type SkuOccurrence = { worksheetName: string; rowNumber: number; sku: string };
 
 function normaliseHeader(value: string) {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
@@ -110,10 +111,31 @@ export function validationIssueFingerprint(input: Pick<ValidationIssue, "workshe
   return `v1-${(hash >>> 0).toString(16).padStart(8, "0")}`;
 }
 
+function joinedList(values: readonly string[]) {
+  if (values.length <= 1) return values[0] ?? "";
+  return `${values.slice(0, -1).join(", ")} and ${values.at(-1)}`;
+}
+
+export function duplicateSkuMessage(sku: string, occurrences: readonly SkuOccurrence[]) {
+  if (occurrences.length > 10) return `SKU ${sku} appears ${occurrences.length} times. See all highlighted duplicate rows.`;
+  const worksheetNames = new Set(occurrences.map((occurrence) => occurrence.worksheetName));
+  const locations = worksheetNames.size === 1
+    ? joinedList(occurrences.map((occurrence) => String(occurrence.rowNumber)))
+    : joinedList(occurrences.map((occurrence) => `${occurrence.worksheetName} row ${occurrence.rowNumber}`));
+  if (occurrences.length === 2) {
+    return worksheetNames.size === 1
+      ? `SKU ${sku} is duplicated on rows ${locations}.`
+      : `SKU ${sku} is duplicated on ${locations}.`;
+  }
+  return worksheetNames.size === 1
+    ? `SKU ${sku} appears ${occurrences.length} times on rows ${locations}.`
+    : `SKU ${sku} appears ${occurrences.length} times on ${locations}.`;
+}
+
 function validateWorksheet(
   worksheet: ExcelJS.Worksheet,
   summary: WorksheetSummary,
-  seenSkus: Map<string, { worksheetName: string; rowNumber: number }>,
+  skuOccurrences: Map<string, SkuOccurrence[]>,
   config: ValidationRuleConfig
 ) {
   const issues: ValidationIssue[] = [];
@@ -148,12 +170,9 @@ function validateWorksheet(
       issues.push(issue({ ...base, category: "missing-required-field", severity: "Error", field: "SKU", currentValue: "", message: "SKU is required." }, nextIndex()));
     } else {
       const normalisedSku = sku.toLowerCase();
-      const existing = seenSkus.get(normalisedSku);
-      if (existing) {
-        issues.push(issue({ ...base, category: "duplicate-sku", severity: "Error", field: "SKU", currentValue: sku, message: `Duplicate SKU also appears on ${existing.worksheetName} row ${existing.rowNumber}.` }, nextIndex()));
-      } else {
-        seenSkus.set(normalisedSku, { worksheetName: summary.name, rowNumber });
-      }
+      const occurrences = skuOccurrences.get(normalisedSku) ?? [];
+      occurrences.push({ worksheetName: summary.name, rowNumber, sku });
+      skuOccurrences.set(normalisedSku, occurrences);
     }
 
     if (!description) issues.push(issue({ ...base, category: "missing-required-field", severity: "Error", field: "Item description", currentValue: "", message: "Item description is required." }, nextIndex()));
@@ -186,12 +205,28 @@ export function validateWorkbook(
   summary: WorkbookSummary,
   config: ValidationRuleConfig = defaultConfig
 ): WorkbookValidationResult {
-  const seenSkus = new Map<string, { worksheetName: string; rowNumber: number }>();
+  const skuOccurrences = new Map<string, SkuOccurrence[]>();
   const worksheetResults = summary.worksheets.map((worksheetSummary) => {
     const worksheet = workbook.getWorksheet(worksheetSummary.name);
-    return worksheet ? validateWorksheet(worksheet, worksheetSummary, seenSkus, config) : { rowsChecked: 0, issues: [] };
+    return worksheet ? validateWorksheet(worksheet, worksheetSummary, skuOccurrences, config) : { rowsChecked: 0, issues: [] };
   });
-  const issues = worksheetResults.flatMap((result) => result.issues);
+  const worksheetIssues = worksheetResults.flatMap((result) => result.issues);
+  let duplicateIssueIndex = worksheetIssues.length;
+  const duplicateIssues = [...skuOccurrences.values()].flatMap((occurrences) => {
+    if (occurrences.length < 2) return [];
+    const message = duplicateSkuMessage(occurrences[0].sku, occurrences);
+    return occurrences.map((occurrence) => issue({
+      category: "duplicate-sku",
+      severity: "Error",
+      worksheetName: occurrence.worksheetName,
+      rowNumber: occurrence.rowNumber,
+      sku: occurrence.sku,
+      field: "SKU",
+      currentValue: occurrence.sku,
+      message
+    }, duplicateIssueIndex += 1));
+  });
+  const issues = [...worksheetIssues, ...duplicateIssues];
   const worksheetsWithIssues = new Set(issues.map((validationIssue) => validationIssue.worksheetName)).size;
 
   return {

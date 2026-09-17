@@ -60,4 +60,20 @@ describe("consolidated worksheet validation preview", () => {
     expect(source).not.toContain("Source column</th>");
     expect(source).not.toContain("<span>Worksheet</span>");
   });
+
+  it("shows every duplicate occurrence while retaining one physical row for multiple issues", () => {
+    const duplicateIssues: ValidationIssue[] = [
+      { id: "d1", fingerprint: "duplicate-row-2", severity: "Error", category: "duplicate-sku", worksheetName: "Products", rowNumber: 2, sku: "ABC", field: "SKU", currentValue: "ABC", message: "SKU ABC is duplicated on rows 2 and 5." },
+      { id: "p1", fingerprint: "price-row-2", severity: "Error", category: "price", worksheetName: "Products", rowNumber: 2, sku: "ABC", field: "Sell price", currentValue: "0", message: "Sell price cannot be zero." },
+      { id: "d2", fingerprint: "duplicate-row-5", severity: "Error", category: "duplicate-sku", worksheetName: "Products", rowNumber: 5, sku: "ABC", field: "SKU", currentValue: "ABC", message: "SKU ABC is duplicated on rows 2 and 5." }
+    ];
+    const worksheetIssues = validationIssuesForWorksheet(duplicateIssues, "Products", new Set(["duplicate-row-2"]));
+    const duplicateMatches = worksheetIssues.filter((issue) => issueMatchesPreviewFilters(issue, { severity: "All", category: "duplicate-sku" }));
+    const grouped = groupValidationIssuesByRow(worksheetIssues);
+
+    expect(duplicateMatches.map((issue) => issue.rowNumber)).toEqual([2, 5]);
+    expect(duplicateMatches.map((issue) => issue.ignored)).toEqual([true, false]);
+    expect([...grouped.keys()]).toEqual([2, 5]);
+    expect(grouped.get(2)).toHaveLength(2);
+  });
 });

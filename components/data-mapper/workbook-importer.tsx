@@ -20,6 +20,7 @@ import {
   worksheetTabId
 } from "@/components/data-mapper/workbook-explorer-ui";
 import { ValidationNextSteps } from "@/components/data-mapper/validation-next-steps";
+import { useHorizontalPan } from "@/components/data-mapper/use-horizontal-pan";
 import {
   groupValidationIssuesByRow,
   issueMatchesPreviewFilters,
@@ -103,6 +104,7 @@ export function WorkbookImporter({ canPrepareOutputProfiles }: { canPrepareOutpu
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [profileError, setProfileError] = useState<string | null>(null);
+  const worksheetPreviewPan = useHorizontalPan<HTMLDivElement>();
 
   const selectedWorksheet = summary?.worksheets.find((worksheet) => worksheet.name === selectedWorksheetName) ?? summary?.worksheets[0] ?? null;
   const preview = useMemo(() => {
@@ -342,7 +344,7 @@ export function WorkbookImporter({ canPrepareOutputProfiles }: { canPrepareOutpu
               ) : null}
 
               {preview && preview.headers.length > 0 && (rows.length > 0 || !validationFilterActive) ? (
-                <div className="previewTableWrap">
+                <div {...worksheetPreviewPan.handlers} aria-label="Worksheet Preview horizontal table" className={`previewTableWrap horizontalPanSurface${worksheetPreviewPan.isPanning ? " isPanning" : ""}`} tabIndex={0}>
                   <table className="previewTable">
                     <thead>
                       <tr>

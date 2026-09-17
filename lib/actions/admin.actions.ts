@@ -153,7 +153,7 @@ export async function updateRoleTemplateAction(formData: FormData) {
     create: { tenantId: actor.tenantId, role, displayName, permissions, nameLocked: true, updatedById: actor.id }
   });
   await audit({ tenantId: actor.tenantId, userId: actor.id, action: "ROLE_TEMPLATE_UPDATED", entityType: "RoleTemplate", entityId: role, after: permissions });
-  revalidatePath("/account/role-templates");
+  revalidatePath("/admin/users/role-templates");
   return { success: "Role template updated." };
 }
 

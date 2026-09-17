@@ -109,12 +109,16 @@ describe("Sprint 4 direct output and Account cleanup", () => {
     expect(rules).not.toContain('"…"');
   });
 
-  it("moves Account into Settings and preserves a safe compatibility redirect", () => {
+  it("keeps Account in Settings, moves Role Templates under Users and preserves compatibility redirects", () => {
     const settings = readFileSync(new URL("../app/(app)/settings/page.tsx", import.meta.url), "utf8");
     const account = readFileSync(new URL("../app/(app)/account/page.tsx", import.meta.url), "utf8");
+    const users = readFileSync(new URL("../app/(app)/admin/users/page.tsx", import.meta.url), "utf8");
+    const legacyRoleTemplates = readFileSync(new URL("../app/(app)/account/role-templates/page.tsx", import.meta.url), "utf8");
     expect(settings).toContain('id="account"');
     expect(settings).toContain("Appearance");
-    expect(settings).toContain("Role Templates");
+    expect(settings).not.toContain("Role Templates");
+    expect(users).toContain('href="/admin/users/role-templates"');
+    expect(legacyRoleTemplates).toContain('redirect("/admin/users/role-templates")');
     expect(account).toContain('redirect("/settings#account")');
   });
 });

@@ -542,6 +542,21 @@ p { line-height: 1.6; }
 .checkboxGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px 16px; margin: 12px 0; }
 .checkboxLine { display: flex; gap: 8px; align-items: center; }
 .rowActions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.roleTemplateGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); gap: 16px; margin-bottom: 20px; }
+.roleTemplateCard { min-width: 0; border: 1px solid var(--border-soft); border-radius: var(--radius-lg); background: var(--card-gradient); box-shadow: var(--shadow-soft); overflow: hidden; }
+.roleTemplateSummary { min-height: 250px; padding: 20px; display: flex; flex-direction: column; gap: 13px; cursor: pointer; list-style: none; }
+.roleTemplateSummary::-webkit-details-marker { display: none; }
+.roleTemplateSummary:focus-visible { outline: 2px solid var(--axiom-aqua); outline-offset: -4px; }
+.roleTemplateHeading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.roleTemplateHeading strong, .roleTemplateHeading small { display: block; }
+.roleTemplateHeading strong { font-size: 1.12rem; }
+.roleTemplateHeading small { margin-top: 5px; color: var(--text-muted); font-size: 0.72rem; font-weight: 800; letter-spacing: 0.05em; }
+.roleTemplatePermissionCount { font-weight: 800; }
+.roleTemplatePermissionPreview { color: var(--text-muted); line-height: 1.45; }
+.roleTemplateAction { width: fit-content; margin-top: auto; color: var(--axiom-blue); font-weight: 800; }
+.roleTemplateAction::after { content: " +"; }
+.roleTemplateCard[open] .roleTemplateAction::after { content: " −"; }
+.roleTemplateEditor { padding: 0 20px 20px; border-top: 1px solid var(--border-soft); }
 
 .loginWrap {
   min-height: 100vh;
@@ -895,6 +910,11 @@ p { line-height: 1.6; }
   border-radius: 14px;
   background: var(--surface-panel);
 }
+.horizontalPanSurface { cursor: grab; touch-action: pan-y; }
+.horizontalPanSurface.isPanning { cursor: grabbing; user-select: none; }
+.horizontalPanSurface input, .horizontalPanSurface select, .horizontalPanSurface textarea { cursor: auto; }
+.horizontalPanSurface button, .horizontalPanSurface a { cursor: pointer; }
+.horizontalPanSurface [draggable="true"] { cursor: grab; }
 .previewTable {
   width: max-content;
   min-width: 100%;
@@ -1147,6 +1167,10 @@ p { line-height: 1.6; }
 .sourceHeadingField input[readonly] { min-height: 43px; background: var(--surface-panel); color: var(--text-muted); cursor: default; }
 .outputColumnFields select { width: 100%; }
 .sheetHeaderActions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
+.addColumnPanel { padding: 14px 20px; display: flex; align-items: end; justify-content: space-between; gap: 16px; flex-wrap: wrap; border-bottom: 1px solid var(--border-soft); background: var(--surface-card); }
+.addColumnPanel > div:first-child { display: grid; gap: 4px; }
+.addColumnPanel .actions { margin: 0; }
+.addSourceColumnField { flex: 1 1 320px; max-width: 520px; margin: 0; }
 .numericInputWithSuffix { display: flex; align-items: stretch; }
 .numericInputWithSuffix input { flex: 1 1 auto; min-width: 0; border-radius: 12px 0 0 12px; }
 .numericInputWithSuffix > span { display: inline-flex; align-items: center; padding: 0 12px; border: 1px solid var(--border-soft); border-left: 0; border-radius: 0 12px 12px 0; color: var(--text-muted); background: var(--surface-raised); }

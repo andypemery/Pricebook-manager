@@ -39,6 +39,21 @@ describe("shared Output Profile rule engine", () => {
     expect(transformNumericValue("0.00432178", "MULTIPLY", "1.1", 6)).toBe("0.004754");
   });
 
+  it("uses one Cost Price source for both the original value and a rounded Sale Price", () => {
+    const original = addSourceColumn([], { sourceColumnIndex: 1, sourceHeading: "Cost Price" }, "cost");
+    const duplicated = addSourceColumn(original, { sourceColumnIndex: 1, sourceHeading: "Cost Price" }, "sale");
+    const configured = updateOutputColumn(duplicated, "sale", {
+      outputHeading: "Sale Price",
+      adjustmentType: "MULTIPLY",
+      adjustmentValue: "1.25",
+      roundingDecimalPlaces: 2
+    });
+
+    expect(buildOutputPreview(configured, [["SKU-1", "100.00"]], [], "ALL").outputRows)
+      .toEqual([["100.00", "125.00"]]);
+    expect(configured.map((column) => column.sourceHeading)).toEqual(["Cost Price", "Cost Price"]);
+  });
+
   it("applies percentage increase, percentage decrease and division", () => {
     expect(transformNumericValue("100", "PERCENT_INCREASE", "12.5", 2)).toBe("112.50");
     expect(transformNumericValue("100", "PERCENT_DECREASE", "18", 2)).toBe("82.00");
