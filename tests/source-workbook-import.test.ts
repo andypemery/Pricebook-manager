@@ -6,6 +6,7 @@ import { sourceWorkbookContentTypes } from "../lib/data-mapper/source-workbook-p
 import { createInMemorySourceWorkbookStorage } from "../lib/data-mapper/source-workbook-storage";
 import { authoriseSourceWorkbookUpload } from "../lib/data-mapper/source-workbook-upload";
 import { validationIssueFingerprint } from "../lib/data-mapper/validation/validation-engine";
+import { sourceRowFingerprint } from "../lib/data-mapper/source-row-exclusions";
 
 const actor = { id: "user-1", tenantId: "tenant-1" };
 const intentSecret = "test-source-upload-secret-that-is-long-enough";
@@ -35,11 +36,13 @@ function newImportDatabase() {
     };
   });
   const createValidationOverrides = vi.fn(async () => ({ count: 1 }));
+  const createRowExclusions = vi.fn(async () => ({ count: 1 }));
   const projectFindFirst = vi.fn(async () => ({ id: "project-1", sourceWorkbookImports: [] as Array<{ id: string }> }));
   const transactionClient = {
     fileReference: { create: createFileReference },
     sourceWorkbookImport: { create: createSourceImport },
     validationIssueOverride: { createMany: createValidationOverrides },
+    sourceWorkbookRowExclusion: { createMany: createRowExclusions },
     project: { update: vi.fn(async () => ({ id: "project-1" })) }
   };
   const transaction = vi.fn(async (callback: (client: typeof transactionClient) => Promise<unknown>) => callback(transactionClient));
@@ -48,7 +51,7 @@ function newImportDatabase() {
     sourceWorkbookImport: { findFirst },
     $transaction: transaction
   } as unknown as PrismaClient;
-  return { db, createFileReference, createSourceImport, createValidationOverrides, transaction, findFirst, projectFindFirst };
+  return { db, createFileReference, createSourceImport, createValidationOverrides, createRowExclusions, transaction, findFirst, projectFindFirst };
 }
 
 async function authoriseAndUpload(options: {
@@ -213,6 +216,41 @@ describe("source workbook direct-upload finalisation", () => {
     const { db: recoveredDb } = newImportDatabase();
     await expect(finaliseSourceWorkbookUpload(recoveredDb, actor, { uploadIntent: authorisation.uploadIntent }, { storage, secret: intentSecret, now }))
       .resolves.toMatchObject({ id: "11111111-1111-4111-8111-111111111111" });
+  });
+
+  it("persists only server-revalidated browser-local row exclusions", async () => {
+    const { db, createRowExclusions } = newImportDatabase();
+    const bytes = await workbookBytes();
+    const { storage, authorisation } = await authoriseAndUpload({ db, bytes });
+    const reference = {
+      worksheetName: "Products",
+      physicalRowNumber: 2,
+      rowFingerprint: sourceRowFingerprint("Products", 2, ["A", "Alpha", "10"])
+    };
+    await finaliseSourceWorkbookUpload(db, actor, { uploadIntent: authorisation.uploadIntent, excludedRows: [reference] }, { storage, secret: intentSecret, now });
+    expect(createRowExclusions).toHaveBeenCalledWith({ data: [{
+      tenantId: "tenant-1",
+      sourceWorkbookImportId: "11111111-1111-4111-8111-111111111111",
+      sourceWorksheetId: "worksheet-0",
+      physicalRowNumber: 2,
+      rowFingerprint: reference.rowFingerprint,
+      excludedById: "user-1"
+    }] });
+  });
+
+  it("rejects manufactured or cross-worksheet row exclusions before registration", async () => {
+    const bytes = await workbookBytes();
+    for (const reference of [
+      { worksheetName: "Products", physicalRowNumber: 2, rowFingerprint: "v1-0000000000000000" },
+      { worksheetName: "Other", physicalRowNumber: 2, rowFingerprint: sourceRowFingerprint("Other", 2, ["A", "Alpha", "10"]) }
+    ]) {
+      const { db, createSourceImport, createRowExclusions } = newImportDatabase();
+      const { storage, authorisation } = await authoriseAndUpload({ db, bytes });
+      await expect(finaliseSourceWorkbookUpload(db, actor, { uploadIntent: authorisation.uploadIntent, excludedRows: [reference] }, { storage, secret: intentSecret, now }))
+        .rejects.toThrow("do not belong to this uploaded workbook");
+      expect(createSourceImport).not.toHaveBeenCalled();
+      expect(createRowExclusions).not.toHaveBeenCalled();
+    }
   });
 
   it("rejects and cleans up a raced new upload if the Project gains a current workbook before finalisation", async () => {

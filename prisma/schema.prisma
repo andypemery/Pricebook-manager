@@ -180,6 +180,7 @@ model Tenant {
   projects              Project[]
   projectOutputProfiles ProjectOutputProfile[]
   validationIssueOverrides ValidationIssueOverride[]
+  sourceWorkbookRowExclusions SourceWorkbookRowExclusion[]
 
   @@index([status])
 }
@@ -224,6 +225,7 @@ model User {
   projectsCreated              Project[]                      @relation("ProjectCreator")
   projectsUpdated              Project[]                      @relation("ProjectUpdater")
   projectOutputProfilesCreated ProjectOutputProfile[]         @relation("ProjectOutputProfileCreator")
+  sourceWorkbookRowsExcluded  SourceWorkbookRowExclusion[]    @relation("SourceWorkbookRowExclusionActor")
 
   @@index([tenantId])
   @@index([role])
@@ -715,6 +717,7 @@ model SourceWorkbookImport {
   worksheets     SourceWorksheet[]
   outputProfiles OutputProfile[]
   validationIssueOverrides ValidationIssueOverride[]
+  rowExclusions            SourceWorkbookRowExclusion[]
 
   @@index([tenantId, createdAt])
   @@index([tenantId, projectId, updatedAt])
@@ -775,6 +778,28 @@ model ValidationIssueOverride {
   @@index([ignoredById])
 }
 
+// Sparse logical deletions only. Workbook bytes and complete source rows remain
+// in private Blob storage and are never copied into Postgres.
+model SourceWorkbookRowExclusion {
+  id                     String               @id @default(cuid())
+  tenantId               String
+  tenant                 Tenant               @relation(fields: [tenantId], references: [id])
+  sourceWorkbookImportId String
+  sourceWorkbookImport   SourceWorkbookImport @relation(fields: [sourceWorkbookImportId], references: [id], onDelete: Cascade)
+  sourceWorksheetId      String
+  sourceWorksheet        SourceWorksheet      @relation(fields: [sourceWorksheetId], references: [id], onDelete: Cascade)
+  physicalRowNumber      Int
+  rowFingerprint         String
+  excludedById           String
+  excludedBy             User                 @relation("SourceWorkbookRowExclusionActor", fields: [excludedById], references: [id])
+  excludedAt             DateTime             @default(now())
+
+  @@unique([sourceWorkbookImportId, sourceWorksheetId, physicalRowNumber])
+  @@index([tenantId, sourceWorkbookImportId])
+  @@index([sourceWorksheetId, physicalRowNumber])
+  @@index([excludedById])
+}
+
 model SourceWorksheet {
   id                     String               @id @default(cuid())
   sourceWorkbookImportId String
@@ -789,6 +814,7 @@ model SourceWorksheet {
   createdAt              DateTime             @default(now())
 
   outputProfiles OutputProfile[]
+  rowExclusions  SourceWorkbookRowExclusion[]
 
   @@unique([sourceWorkbookImportId, name])
   @@index([sourceWorkbookImportId, position])

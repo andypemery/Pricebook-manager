@@ -175,4 +175,20 @@ describe("multi-worksheet output generation", () => {
     await expect(generateOutputForTenant(database().db, { id: "user-1", tenantId: "tenant-1" }, baseInput, "2026-09-16"))
       .resolves.toMatchObject({ ignoredBlockingCount: 1 });
   });
+
+  it("skips deleted physical rows before row filters and transformations", async () => {
+    const workbook = await sourceWorkbook();
+    vi.mocked(loadSourceValidationState).mockResolvedValue({
+      workbook,
+      issues: [],
+      unresolvedBlockingCount: 0,
+      ignoredBlockingCount: 0,
+      excludedRowKeys: new Set(["HP Print\u001f2", "Canon Print\u001f3"])
+    } as never);
+
+    const output = await generateOutputForTenant(database().db, { id: "user-1", tenantId: "tenant-1" }, baseInput, "2026-09-16");
+
+    expect(new TextDecoder().decode(output.bytes)).toBe("SKU;NET\r\nCANON-1;5.50");
+    expect(output.rowCount).toBe(1);
+  });
 });

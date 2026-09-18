@@ -69,15 +69,15 @@ describe("Sprint 4 output-heading controls", () => {
     expect(markup).not.toContain("Remove column");
     expect(markup).not.toContain("outputColumnActions");
     expect(markup).not.toContain("× …");
-    expect(markup).toContain("Current Output Profile context");
-    expect(markup).toContain("Supplier.xlsx");
-    expect(markup).toContain("Products");
-    expect(markup.match(/<span>Output Profile<\/span>/g)).toHaveLength(1);
+    expect(markup).not.toContain("Current Output Profile context");
+    expect(markup).toContain("Save as new profile");
+    expect(markup).toContain("Back to Output Profiles");
+    expect(markup).not.toContain("<span>Output Profile</span>");
     expect(markup).not.toContain("Apply saved profile to this worksheet");
     expect(markup).not.toContain("Currently editing");
-    expect(markup).toContain("New Output Profile");
-    expect(markup).toContain("Duplicate");
-    expect(markup).toContain("Rename");
+    expect(markup).not.toContain("New Output Profile");
+    expect(markup).not.toContain("Duplicate");
+    expect(markup).not.toContain("Rename");
     expect(markup).toContain("Delete");
   });
 

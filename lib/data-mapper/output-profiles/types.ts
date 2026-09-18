@@ -136,6 +136,7 @@ export type OutputProfileSummary = {
   updatedAt: string;
   originWorkbookFileName: string;
   originWorksheetName: string;
+  usedInProject?: boolean;
 };
 
 export type OutputProfileCompatibilityField = {

@@ -4,6 +4,7 @@ import {
   deleteOutputProfileForTenant,
   duplicateOutputProfileForTenant,
   listReusableOutputProfiles,
+  listTenantOutputProfilesForProject,
   listOutputProfileWorkspace,
   loadOutputProfileBuilder,
   OutputProfileNotFoundError
@@ -156,6 +157,20 @@ describe("reusable Output Profile management", () => {
     }]);
     expect(findMany.mock.calls[0]?.[0].where).toEqual({ tenantId: "tenant-1", sourceWorkbookImport: { tenantId: "tenant-1" } });
     expect(findMany.mock.calls[0]?.[0].select).not.toHaveProperty("sourceWorkbookImport.worksheets");
+  });
+
+  it("lists associated and unattached same-tenant profiles for a Project in one compact query", async () => {
+    const findMany = vi.fn().mockResolvedValue([
+      { id: "used", name: "Used", sourceWorkbookImportId: "source-1", sourceWorksheetId: "sheet-1", outputFormat: "CSV", updatedAt: new Date("2026-09-18T09:00:00Z"), _count: { columns: 2 }, sourceWorkbookImport: { originalFileName: "A.xlsx" }, sourceWorksheet: { name: "Products" }, projects: [{ id: "link-1" }] },
+      { id: "other", name: "Other", sourceWorkbookImportId: "source-2", sourceWorksheetId: "sheet-2", outputFormat: "XLSX", updatedAt: new Date("2026-09-17T09:00:00Z"), _count: { columns: 4 }, sourceWorkbookImport: { originalFileName: "B.xlsx" }, sourceWorksheet: { name: "Prices" }, projects: [] }
+    ]);
+    const db = { outputProfile: { findMany } } as unknown as PrismaClient;
+
+    const profiles = await listTenantOutputProfilesForProject(db, "tenant-1", "project-1");
+
+    expect(profiles.map((profile) => [profile.id, profile.usedInProject])).toEqual([["used", true], ["other", false]]);
+    expect(findMany.mock.calls[0]?.[0].where).toEqual({ tenantId: "tenant-1", sourceWorkbookImport: { tenantId: "tenant-1" } });
+    expect(findMany.mock.calls[0]?.[0].select.projects).toEqual({ where: { tenantId: "tenant-1", projectId: "project-1", project: { tenantId: "tenant-1" } }, select: { id: true }, take: 1 });
   });
 
   it("switches by loading independent tenant-scoped profile definitions", async () => {

@@ -92,4 +92,18 @@ describe("browser-to-private-Blob source uploads", () => {
     expect(body).toEqual({ uploadIntent: "signed-intent", ignoredValidationFingerprints: ["fingerprint-1", "fingerprint-2"] });
     expect(body).not.toHaveProperty("rows");
   });
+
+  it("hands browser-local deleted-row references to finalisation as compact metadata", async () => {
+    const request = successfulRequest();
+    const excludedRows = [{ worksheetName: "Products", physicalRowNumber: 2, rowFingerprint: "v1-0123456789abcdef" }];
+    await uploadSourceWorkbookDirectly(declaredSizeFile(1024), {
+      projectId,
+      request: request as unknown as typeof fetch,
+      directPut: vi.fn(async () => undefined),
+      excludedRows
+    });
+    const body = JSON.parse(String(request.mock.calls[1]?.[1]?.body));
+    expect(body.excludedRows).toEqual(excludedRows);
+    expect(JSON.stringify(body)).not.toContain("fileContents");
+  });
 });

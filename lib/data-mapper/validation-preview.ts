@@ -1,10 +1,19 @@
 import type { ValidationIssue, ValidationIssueCategory, ValidationSeverity } from "@/lib/data-mapper/types";
+import { sourceRowKey } from "@/lib/data-mapper/source-row-exclusions";
 
 export type PreviewValidationIssue = ValidationIssue & { ignored: boolean };
 
 export type PreviewValidationFilters = {
+  worksheet?: "All worksheets" | string;
   severity: "All" | ValidationSeverity;
   category: "All" | ValidationIssueCategory;
+};
+
+export type PreviewValidationRow = {
+  key: string;
+  worksheetName: string;
+  rowNumber: number;
+  issues: PreviewValidationIssue[];
 };
 
 export function validationIssuesForWorksheet(
@@ -18,8 +27,52 @@ export function validationIssuesForWorksheet(
 }
 
 export function issueMatchesPreviewFilters(issue: PreviewValidationIssue, filters: PreviewValidationFilters) {
-  return (filters.severity === "All" || issue.severity === filters.severity)
+  return (!filters.worksheet || filters.worksheet === "All worksheets" || issue.worksheetName === filters.worksheet)
+    && (filters.severity === "All" || issue.severity === filters.severity)
     && (filters.category === "All" || issue.category === filters.category);
+}
+
+export function validationRowsForFilters(
+  issues: readonly ValidationIssue[],
+  ignoredFingerprints: ReadonlySet<string>,
+  excludedRowKeys: ReadonlySet<string>,
+  filters: PreviewValidationFilters,
+  searchTerm = ""
+) {
+  const normalisedSearch = searchTerm.trim().toLocaleLowerCase("en-GB");
+  const grouped = new Map<string, PreviewValidationRow>();
+  for (const issue of issues) {
+    const key = sourceRowKey(issue.worksheetName, issue.rowNumber);
+    if (excludedRowKeys.has(key)) continue;
+    const previewIssue = { ...issue, ignored: issue.severity === "Error" && ignoredFingerprints.has(issue.fingerprint) };
+    if (!issueMatchesPreviewFilters(previewIssue, filters)) continue;
+    if (normalisedSearch && ![
+      issue.worksheetName,
+      String(issue.rowNumber),
+      issue.field,
+      issue.currentValue ?? "",
+      issue.message
+    ].some((value) => value.toLocaleLowerCase("en-GB").includes(normalisedSearch))) continue;
+    const row = grouped.get(key) ?? { key, worksheetName: issue.worksheetName, rowNumber: issue.rowNumber, issues: [] };
+    row.issues.push(previewIssue);
+    grouped.set(key, row);
+  }
+  return [...grouped.values()];
+}
+
+export function visibleRowSelectionState(selectedRowKeys: ReadonlySet<string>, visibleRowKeys: readonly string[]) {
+  const selectedVisibleCount = visibleRowKeys.filter((key) => selectedRowKeys.has(key)).length;
+  return {
+    checked: visibleRowKeys.length > 0 && selectedVisibleCount === visibleRowKeys.length,
+    indeterminate: selectedVisibleCount > 0 && selectedVisibleCount < visibleRowKeys.length,
+    selectedVisibleCount
+  };
+}
+
+export function updateVisibleRowSelection(selectedRowKeys: ReadonlySet<string>, visibleRowKeys: readonly string[], checked: boolean) {
+  const next = new Set(selectedRowKeys);
+  for (const key of visibleRowKeys) checked ? next.add(key) : next.delete(key);
+  return next;
 }
 
 export function groupValidationIssuesByRow(issues: readonly PreviewValidationIssue[]) {

@@ -45,11 +45,13 @@ describe("source workbook re-upload replacement", () => {
       .mockResolvedValueOnce({ id: existing.id, projectId: existing.projectId })
       .mockResolvedValueOnce(existing);
     const clearOverrides = vi.fn(async () => { events.push("clear-overrides"); return { count: 2 }; });
+    const clearExclusions = vi.fn(async () => { events.push("clear-exclusions"); return { count: 3 }; });
     const updateWorksheet = vi.fn(async () => { events.push("update-worksheet"); return {}; });
     const transactionClient = {
       fileReference: { create: vi.fn(async () => ({ id: "file-new" })) },
       sourceWorksheet: { update: updateWorksheet, create: vi.fn(async () => ({})) },
       validationIssueOverride: { deleteMany: clearOverrides },
+      sourceWorkbookRowExclusion: { deleteMany: clearExclusions, createMany: vi.fn() },
       project: { update: vi.fn(async () => ({ id: "project-1" })) },
       sourceWorkbookImport: { update: vi.fn(async () => {
         events.push("switch-source-reference");
@@ -79,6 +81,7 @@ describe("source workbook re-upload replacement", () => {
 
     expect(transaction).toHaveBeenCalledTimes(1);
     expect(clearOverrides).toHaveBeenCalledWith({ where: { tenantId: actor.tenantId, sourceWorkbookImportId: existing.id } });
+    expect(clearExclusions).toHaveBeenCalledWith({ where: { tenantId: actor.tenantId, sourceWorkbookImportId: existing.id } });
     expect(updateWorksheet).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "worksheet-existing" } }));
     expect(events.indexOf("switch-source-reference")).toBeLessThan(events.indexOf(`delete:${oldStorageKey}`));
     expect(await storage.head(oldStorageKey)).toBeNull();

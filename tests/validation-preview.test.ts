@@ -6,8 +6,12 @@ import {
   issueMatchesPreviewFilters,
   rowSeverityLabel,
   sourceCellValidationState,
+  updateVisibleRowSelection,
+  validationRowsForFilters,
+  visibleRowSelectionState,
   validationIssuesForWorksheet
 } from "../lib/data-mapper/validation-preview";
+import { sourceRowKey } from "../lib/data-mapper/source-row-exclusions";
 import type { ValidationIssue, WorksheetPreview } from "../lib/data-mapper/types";
 
 const issues: ValidationIssue[] = [
@@ -51,14 +55,14 @@ describe("consolidated worksheet validation preview", () => {
 
   it("keeps filters and synthetic metadata in Worksheet Preview and removes the separate issue card", () => {
     const source = readFileSync(new URL("../components/data-mapper/workbook-importer.tsx", import.meta.url), "utf8");
-    expect(source).toContain("Worksheet preview");
+    expect(source).toContain("Validation preview");
     expect(source).toContain("Severity");
     expect(source).toContain("Issue type");
     expect(source).toContain("Current value");
     expect(source).toContain("Rule / message");
     expect(source).not.toContain("<h2>Validation issues</h2>");
     expect(source).not.toContain("Source column</th>");
-    expect(source).not.toContain("<span>Worksheet</span>");
+    expect(source).toContain("<span>Worksheet</span>");
   });
 
   it("shows every duplicate occurrence while retaining one physical row for multiple issues", () => {
@@ -75,5 +79,39 @@ describe("consolidated worksheet validation preview", () => {
     expect(duplicateMatches.map((issue) => issue.ignored)).toEqual([true, false]);
     expect([...grouped.keys()]).toEqual([2, 5]);
     expect(grouped.get(2)).toHaveLength(2);
+  });
+
+  it("defaults to workbook-wide physical rows and combines worksheet, severity and issue-type filters", () => {
+    const allRows = validationRowsForFilters(issues, new Set(["ignored-sku"]), new Set(), { worksheet: "All worksheets", severity: "All", category: "All" });
+    expect(allRows.map((row) => [row.worksheetName, row.rowNumber, row.issues.length])).toEqual([
+      ["Products", 4, 2],
+      ["Products", 5, 1],
+      ["Other", 4, 1]
+    ]);
+    expect(validationRowsForFilters(issues, new Set(), new Set(), { worksheet: "All worksheets", severity: "Warning", category: "margin" })).toHaveLength(1);
+    expect(validationRowsForFilters(issues, new Set(), new Set(), { worksheet: "Products", severity: "Error", category: "price" })).toEqual([
+      expect.objectContaining({ key: sourceRowKey("Products", 4), worksheetName: "Products", rowNumber: 4 })
+    ]);
+  });
+
+  it("selects and clears only visible physical rows while reporting checked and indeterminate state", () => {
+    const visible = [sourceRowKey("Products", 4), sourceRowKey("Products", 5)];
+    const hidden = sourceRowKey("Other", 4);
+    const initial = new Set([hidden]);
+    const allVisible = updateVisibleRowSelection(initial, visible, true);
+    expect([...allVisible]).toEqual([hidden, ...visible]);
+    expect(visibleRowSelectionState(allVisible, visible)).toEqual({ checked: true, indeterminate: false, selectedVisibleCount: 2 });
+    const partial = updateVisibleRowSelection(allVisible, [visible[0]], false);
+    expect(visibleRowSelectionState(partial, visible)).toEqual({ checked: false, indeterminate: true, selectedVisibleCount: 1 });
+    const cleared = updateVisibleRowSelection(partial, visible, false);
+    expect([...cleared]).toEqual([hidden]);
+    expect(visibleRowSelectionState(cleared, visible)).toEqual({ checked: false, indeterminate: false, selectedVisibleCount: 0 });
+  });
+
+  it("removes excluded rows from the active issue view without conflating ignored errors", () => {
+    const excluded = new Set([sourceRowKey("Products", 4)]);
+    const rows = validationRowsForFilters(issues, new Set(["ignored-sku"]), excluded, { worksheet: "All worksheets", severity: "All", category: "All" });
+    expect(rows.map((row) => row.key)).toEqual([sourceRowKey("Products", 5), sourceRowKey("Other", 4)]);
+    expect(rows[0].issues[0].ignored).toBe(true);
   });
 });

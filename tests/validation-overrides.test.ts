@@ -27,8 +27,9 @@ function database() {
     return { count: where.issueFingerprint.in.length };
   });
   const db = {
-    sourceWorkbookImport: { findFirst: vi.fn(async () => ({ id: "source-1", originalFileName: "pricebook.xlsx", fileReference: { storageKey: "private/source.xlsx", fileType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" } })) },
+    sourceWorkbookImport: { findFirst: vi.fn(async () => ({ id: "source-1", projectId: "project-1", originalFileName: "pricebook.xlsx", fileReference: { storageKey: "private/source.xlsx", fileType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }, worksheets: [{ id: "worksheet-1", name: "Products", columnCount: 6 }] })) },
     validationIssueOverride: { findMany, upsert, deleteMany },
+    sourceWorkbookRowExclusion: { findMany: vi.fn(async () => []) },
     $transaction: vi.fn(async (promises: Promise<unknown>[]) => Promise.all(promises))
   } as unknown as PrismaClient;
   return { db, upsert, deleteMany };

@@ -1,6 +1,13 @@
 import type { PrismaClient } from "@prisma/client";
 import { createWorksheetPreview, readWorkbook } from "@/lib/data-mapper/excel-import";
 import { validateWorkbook } from "@/lib/data-mapper/validation";
+import {
+  parseSourceRowReferences,
+  sourceRowKey,
+  sourceRowReferenceFromWorksheet,
+  sourceRowReferenceMatches,
+  type SourceRowReference
+} from "@/lib/data-mapper/source-row-exclusions";
 import { outputProfilePreviewRowLimit } from "@/lib/data-mapper/output-profiles/types";
 import { maximumSourceWorkbookBytes } from "@/lib/data-mapper/source-workbook-policy";
 import {
@@ -32,7 +39,7 @@ type PreparedWorksheet = {
 
 export class SourceWorkbookImportError extends Error {}
 
-async function inspectSourceWorkbook(file: File) {
+async function inspectSourceWorkbook(file: File, requestedExclusions: readonly SourceRowReference[]) {
   if (!(file instanceof File) || file.size === 0) throw new SourceWorkbookImportError("Choose an Excel workbook to continue.");
   if (file.size > maximumSourceWorkbookBytes) throw new SourceWorkbookImportError("The workbook is larger than the 20 MB intake limit.");
 
@@ -67,7 +74,24 @@ async function inspectSourceWorkbook(file: File) {
   if (JSON.stringify(worksheets).length > maximumCompactMetadataCharacters) {
     throw new SourceWorkbookImportError("The workbook's compact preview metadata is too large to store safely.");
   }
-  return { validation, worksheets };
+  const issueRowKeys = new Set(validation.issues.map((issue) => sourceRowKey(issue.worksheetName, issue.rowNumber)));
+  const worksheetSummaries = new Map(summary.worksheets.map((worksheet) => [worksheet.name, worksheet]));
+  const validExclusions = new Map<string, SourceRowReference>();
+  for (const key of issueRowKeys) {
+    const [worksheetName, rowNumberText] = key.split("\u001f");
+    const worksheetSummary = worksheetSummaries.get(worksheetName);
+    const worksheet = workbook.getWorksheet(worksheetName);
+    if (!worksheetSummary || !worksheet) continue;
+    const reference = sourceRowReferenceFromWorksheet(worksheet, worksheetName, Number(rowNumberText), worksheetSummary.columnCount);
+    if (reference) validExclusions.set(key, reference);
+  }
+  if (requestedExclusions.some((row) => {
+    const current = validExclusions.get(sourceRowKey(row.worksheetName, row.physicalRowNumber));
+    return !current || !sourceRowReferenceMatches(current, row);
+  })) {
+    throw new SourceWorkbookImportError("One or more deleted rows do not belong to this uploaded workbook.");
+  }
+  return { validation, worksheets, excludedRows: requestedExclusions.map((row) => validExclusions.get(sourceRowKey(row.worksheetName, row.physicalRowNumber))!) };
 }
 
 function verifyStoredObject(metadata: StoredSourceWorkbookMetadata | null, expected: { storageKey: string; fileSizeBytes: number; contentType: string }): asserts metadata is StoredSourceWorkbookMetadata {
@@ -103,7 +127,7 @@ async function safelyDeleteUploadedObject(storage: SourceWorkbookStorage, storag
 export async function finaliseSourceWorkbookUpload(
   db: PrismaClient,
   actor: { id: string; tenantId: string },
-  input: { uploadIntent: string; worksheetName?: unknown; ignoredValidationFingerprints?: unknown },
+  input: { uploadIntent: string; worksheetName?: unknown; ignoredValidationFingerprints?: unknown; excludedRows?: unknown },
   options: { storage?: SourceWorkbookStorage; secret?: string; now?: number } = {}
 ) {
   const intent = validateSourceWorkbookUploadIntent({
@@ -145,12 +169,12 @@ export async function finaliseSourceWorkbookUpload(
       worksheets: { orderBy: { position: "asc" }, select: { id: true, name: true, headers: true } }
     }
   });
-  if (!intent.replaceSourceWorkbookImportId && existing?.fileReference?.storageKey === intent.storageKey) return existing;
+  if (!intent.replaceSourceWorkbookImportId && existing?.fileReference?.storageKey === intent.storageKey) return { ...existing, verifiedExcludedRows: [] as SourceRowReference[] };
   if (!intent.replaceSourceWorkbookImportId && existing) {
     await safelyDeleteUploadedObject(storage, intent.storageKey);
     throw new SourceWorkbookImportError("The source workbook upload conflicts with an existing source record.");
   }
-  if (intent.replaceSourceWorkbookImportId && existing?.fileReference?.storageKey === intent.storageKey) return existing;
+  if (intent.replaceSourceWorkbookImportId && existing?.fileReference?.storageKey === intent.storageKey) return { ...existing, verifiedExcludedRows: [] as SourceRowReference[] };
   if (intent.replaceSourceWorkbookImportId && !existing) {
     await safelyDeleteUploadedObject(storage, intent.storageKey);
     throw new SourceWorkbookImportError("The source workbook to re-upload is no longer available.");
@@ -168,7 +192,11 @@ export async function finaliseSourceWorkbookUpload(
 
   let prepared;
   try {
-    prepared = await inspectSourceWorkbook(new File([bytes], intent.originalFileName, { type: intent.contentType }));
+    const requestedExclusions = parseSourceRowReferences(input.excludedRows);
+    if (input.excludedRows !== undefined && (!Array.isArray(input.excludedRows) || input.excludedRows.some((row) => parseSourceRowReferences([row]).length !== 1))) {
+      throw new SourceWorkbookImportError("One or more deleted rows are not valid for this uploaded workbook.");
+    }
+    prepared = await inspectSourceWorkbook(new File([bytes], intent.originalFileName, { type: intent.contentType }), requestedExclusions);
     if (existing) compatibleReplacementWorksheets(existing.worksheets, prepared.worksheets);
   } catch (error) {
     await safelyDeleteUploadedObject(storage, intent.storageKey);
@@ -224,8 +252,21 @@ export async function finaliseSourceWorkbookUpload(
           }))
         });
       }
+      if (prepared.excludedRows.length > 0) {
+        const worksheetIds = new Map(sourceImport.worksheets.map((worksheet) => [worksheet.name, worksheet.id]));
+        await transaction.sourceWorkbookRowExclusion.createMany({
+          data: prepared.excludedRows.map((row) => ({
+            tenantId: actor.tenantId,
+            sourceWorkbookImportId: sourceImport.id,
+            sourceWorksheetId: worksheetIds.get(row.worksheetName)!,
+            physicalRowNumber: row.physicalRowNumber,
+            rowFingerprint: row.rowFingerprint,
+            excludedById: actor.id
+          }))
+        });
+      }
       await transaction.project.update({ where: { id: intent.projectId }, data: { updatedById: actor.id } });
-      return sourceImport;
+      return { ...sourceImport, verifiedExcludedRows: prepared.excludedRows };
     });
   }
 
@@ -233,15 +274,18 @@ export async function finaliseSourceWorkbookUpload(
   const replacement = await db.$transaction(async (transaction) => {
     const fileReference = await transaction.fileReference.create({ data: fileReferenceData });
     const existingByName = new Map(existing.worksheets.map((worksheet) => [worksheet.name, worksheet]));
+    const replacementWorksheetIds = new Map(existing.worksheets.map((worksheet) => [worksheet.name, worksheet.id]));
     for (const worksheet of prepared.worksheets) {
       const previous = existingByName.get(worksheet.name);
       if (previous) {
         await transaction.sourceWorksheet.update({ where: { id: previous.id }, data: worksheet });
       } else {
-        await transaction.sourceWorksheet.create({ data: { ...worksheet, sourceWorkbookImportId: existing.id } });
+        const created = await transaction.sourceWorksheet.create({ data: { ...worksheet, sourceWorkbookImportId: existing.id }, select: { id: true } });
+        replacementWorksheetIds.set(worksheet.name, created.id);
       }
     }
     await transaction.validationIssueOverride.deleteMany({ where: { tenantId: actor.tenantId, sourceWorkbookImportId: existing.id } });
+    await transaction.sourceWorkbookRowExclusion.deleteMany({ where: { tenantId: actor.tenantId, sourceWorkbookImportId: existing.id } });
     if (suppliedIgnoredFingerprints.length > 0) {
       await transaction.validationIssueOverride.createMany({
         data: suppliedIgnoredFingerprints.map((issueFingerprint) => ({
@@ -249,6 +293,18 @@ export async function finaliseSourceWorkbookUpload(
           sourceWorkbookImportId: existing.id,
           issueFingerprint,
           ignoredById: actor.id
+        }))
+      });
+    }
+    if (prepared.excludedRows.length > 0) {
+      await transaction.sourceWorkbookRowExclusion.createMany({
+        data: prepared.excludedRows.map((row) => ({
+          tenantId: actor.tenantId,
+          sourceWorkbookImportId: existing.id,
+          sourceWorksheetId: replacementWorksheetIds.get(row.worksheetName)!,
+          physicalRowNumber: row.physicalRowNumber,
+          rowFingerprint: row.rowFingerprint,
+          excludedById: actor.id
         }))
       });
     }
@@ -265,7 +321,7 @@ export async function finaliseSourceWorkbookUpload(
       include: { worksheets: { orderBy: { position: "asc" } } }
     });
     await transaction.project.update({ where: { id: intent.projectId }, data: { updatedById: actor.id } });
-    return sourceImport;
+    return { ...sourceImport, verifiedExcludedRows: prepared.excludedRows };
   });
 
   if (oldFileReference && oldFileReference.storageKey !== intent.storageKey) {

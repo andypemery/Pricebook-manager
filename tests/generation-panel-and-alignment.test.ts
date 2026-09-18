@@ -14,7 +14,7 @@ describe("compact output-generation validation review", () => {
     expect(source).toContain("Restore selected");
     expect(source).toContain("Ignore all blocking errors");
     expect(source).toContain("Restore all ignored errors");
-    expect(source.indexOf("state.issues.map")).toBeGreaterThan(source.indexOf("reviewOpen ?"));
+    expect(source.indexOf("<tbody>{validationRows.map")).toBeGreaterThan(source.indexOf("reviewOpen ?"));
   });
 });
 

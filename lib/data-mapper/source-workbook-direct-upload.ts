@@ -1,4 +1,5 @@
 import { validateSourceWorkbookDescriptor } from "@/lib/data-mapper/source-workbook-policy";
+import type { SourceRowReference } from "@/lib/data-mapper/source-row-exclusions";
 
 type UploadAuthorisationResponse = {
   uploadIntent?: string;
@@ -63,6 +64,7 @@ export async function uploadSourceWorkbookDirectly(
     projectId: string;
     worksheetName?: string | null;
     ignoredValidationFingerprints?: string[];
+    excludedRows?: SourceRowReference[];
     replaceSourceWorkbookImportId?: string;
     onProgress?: (percentage: number) => void;
     signal?: AbortSignal;
@@ -105,7 +107,12 @@ export async function uploadSourceWorkbookDirectly(
   const registrationResponse = await request("/api/data-mapper/source-imports", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ uploadIntent: authorisation.uploadIntent, worksheetName: options.worksheetName, ignoredValidationFingerprints: options.ignoredValidationFingerprints }),
+    body: JSON.stringify({
+      uploadIntent: authorisation.uploadIntent,
+      worksheetName: options.worksheetName,
+      ignoredValidationFingerprints: options.ignoredValidationFingerprints,
+      excludedRows: options.excludedRows
+    }),
     signal: options.signal
   });
   const registration = await registrationResponse.json() as Partial<SourceWorkbookRegistrationResponse> & { error?: string };

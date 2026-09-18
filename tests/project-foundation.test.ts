@@ -161,9 +161,13 @@ describe("Project navigation and workspace structure", () => {
 
   it("guards Project-aware mapping relationships without leaking inaccessible metadata", () => {
     const mapping = source("app/(app)/mapping/page.tsx");
+    const repository = source("lib/data-mapper/output-profiles/repository.ts");
+    const actions = source("lib/actions/output-profile.actions.ts");
     expect(mapping).toContain("isProjectSourceAvailable");
-    expect(mapping).toContain("project: { tenantId: actor.tenantId }");
-    expect(mapping).toContain("outputProfile: { tenantId: actor.tenantId, sourceWorkbookImport: { tenantId: actor.tenantId } }");
+    expect(mapping).toContain("listTenantOutputProfilesForProject");
+    expect(repository).toContain("Project associations organise current use");
+    expect(repository).toContain("where: { tenantId, sourceWorkbookImport: { tenantId } }");
+    expect(actions).toContain("associateOutputProfileWithProjectAction");
     expect(mapping).toContain("not available to your account");
     expect(mapping).toContain("Editing here updates the reusable master");
   });
@@ -175,7 +179,9 @@ describe("Project navigation and workspace structure", () => {
     expect(manager.match(/<span>Output Profile<\/span>/g)).toHaveLength(1);
     expect(manager).not.toContain("Apply saved profile to this worksheet");
     expect(manager).not.toContain("Currently editing");
-    expect(manager).toContain("Add profile");
+    expect(manager).not.toContain(">Add profile<");
+    expect(manager).toContain("Used in this Project");
+    expect(manager).toContain("Other reusable profiles");
     expect(builder.indexOf("outputSpreadsheetCard")).toBeLessThan(builder.indexOf("<OutputColumnInspector"));
     expect(css).toMatch(/\.outputColumnsWorkspace\s*\{\s*display:\s*block;/);
     expect(css).toContain(".outputColumnFields.source { grid-template-columns: repeat(5, minmax(0, 1fr)); }");

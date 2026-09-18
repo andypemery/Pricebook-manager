@@ -59,8 +59,10 @@ describe("Output Profile guided workspace", () => {
     stageIds.forEach((id) => expect(markup).toContain(`href="#${id}"`));
     stageIds.slice(1).forEach((id, index) => expect(markup.indexOf(`id="${stageIds[index]}"`)).toBeLessThan(markup.indexOf(`id="${id}"`)));
     expect(markup.match(/Output Profile name/g)).toHaveLength(1);
-    expect(markup).toContain("Source workbook");
-    expect(markup).toContain("Reference worksheet");
+    expect(markup).not.toContain("Source workbook");
+    expect(markup).not.toContain("Reference worksheet");
+    expect(markup).toContain("Save as new profile");
+    expect(markup).toContain("Back to Output Profiles");
     expect(markup).toContain("Source Columns");
     expect(markup).toContain("Output Columns");
     expect(markup).toMatch(/class="outputColumnsWorkspace"[\s\S]*class="card spreadsheetCard outputSpreadsheetCard"[\s\S]*<aside class="outputColumnInspector"/);

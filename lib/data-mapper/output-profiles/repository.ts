@@ -165,6 +165,39 @@ export async function listProjectOutputProfiles(db: PrismaClient, tenantId: stri
   return associations.map(({ outputProfile: profile }) => ({ id: profile.id, name: profile.name, sourceWorkbookImportId: profile.sourceWorkbookImportId, sourceWorksheetId: profile.sourceWorksheetId, outputFormat: profile.outputFormat, outputColumnCount: profile._count.columns, updatedAt: profile.updatedAt.toISOString(), originWorkbookFileName: profile.sourceWorkbookImport.originalFileName, originWorksheetName: profile.sourceWorksheet.name }));
 }
 
+// Project associations organise current use; they do not limit discovery of
+// tenant-owned reusable masters.
+export async function listTenantOutputProfilesForProject(db: PrismaClient, tenantId: string, projectId: string): Promise<OutputProfileSummary[]> {
+  const profiles = await db.outputProfile.findMany({
+    where: { tenantId, sourceWorkbookImport: { tenantId } },
+    orderBy: { updatedAt: "desc" },
+    select: {
+      id: true,
+      name: true,
+      outputFormat: true,
+      sourceWorkbookImportId: true,
+      sourceWorksheetId: true,
+      updatedAt: true,
+      _count: { select: { columns: true } },
+      sourceWorkbookImport: { select: { originalFileName: true } },
+      sourceWorksheet: { select: { name: true } },
+      projects: { where: { tenantId, projectId, project: { tenantId } }, select: { id: true }, take: 1 }
+    }
+  });
+  return profiles.map((profile) => ({
+    id: profile.id,
+    name: profile.name,
+    sourceWorkbookImportId: profile.sourceWorkbookImportId,
+    sourceWorksheetId: profile.sourceWorksheetId,
+    outputFormat: profile.outputFormat,
+    outputColumnCount: profile._count.columns,
+    updatedAt: profile.updatedAt.toISOString(),
+    originWorkbookFileName: profile.sourceWorkbookImport.originalFileName,
+    originWorksheetName: profile.sourceWorksheet.name,
+    usedInProject: profile.projects.length > 0
+  }));
+}
+
 export async function loadOutputProfileBuilder(
   db: PrismaClient,
   tenantId: string,

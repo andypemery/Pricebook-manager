@@ -2,8 +2,8 @@ import Link from "next/link";
 import { OutputProfileBuilder } from "@/components/data-mapper/output-profile-builder";
 import { requireUser } from "@/lib/auth";
 import {
-  listProjectOutputProfiles,
   listReusableOutputProfiles,
+  listTenantOutputProfilesForProject,
   loadOutputProfileBuilder
 } from "@/lib/data-mapper/output-profiles/repository";
 import { defaultEffectiveDate } from "@/lib/data-mapper/output-profiles/filename";
@@ -45,20 +45,6 @@ export default async function MappingPage({ searchParams }: { searchParams: Mapp
     if (!sourceAvailable) return <UnavailableSelection />;
   }
 
-  if (project && projectProfileId) {
-    const attached = await prisma.projectOutputProfile.findFirst({
-      where: {
-        tenantId: actor.tenantId,
-        projectId: project.id,
-        outputProfileId: projectProfileId,
-        project: { tenantId: actor.tenantId },
-        outputProfile: { tenantId: actor.tenantId, sourceWorkbookImport: { tenantId: actor.tenantId } }
-      },
-      select: { id: true }
-    });
-    if (!attached) return <UnavailableSelection />;
-  }
-
   const selection = project
     ? {
         applyProfileId: projectProfileId,
@@ -67,7 +53,7 @@ export default async function MappingPage({ searchParams }: { searchParams: Mapp
       }
     : { profileId: params.profile };
   const [profiles, builderData] = await Promise.all([
-    project ? listProjectOutputProfiles(prisma, actor.tenantId, project.id) : listReusableOutputProfiles(prisma, actor.tenantId),
+    project ? listTenantOutputProfilesForProject(prisma, actor.tenantId, project.id) : listReusableOutputProfiles(prisma, actor.tenantId),
     loadOutputProfileBuilder(prisma, actor.tenantId, selection)
   ]);
   const canEdit = hasPermission(actor, "editRecords");
@@ -78,7 +64,7 @@ export default async function MappingPage({ searchParams }: { searchParams: Mapp
       <div>
         <p className="breadcrumb">{project ? `Projects › ${project.name}` : "Output Profiles"}</p>
         <h1>{project ? "Build Output" : "Output Profiles"}</h1>
-        <p>{project ? "Apply an attached reusable profile to this Project workbook." : "Reusable master templates available across compatible Projects."}</p>
+        <p>{project ? "Apply any reusable tenant Output Profile to this Project workbook." : "Reusable master templates available across compatible Projects."}</p>
       </div>
       <span className="badge">{project ? "Project workspace" : "Reusable masters"}</span>
     </section>
@@ -105,7 +91,7 @@ export default async function MappingPage({ searchParams }: { searchParams: Mapp
     </section> : !selectionRequested ? <section className="card outputProfileWelcome">
       <h2>{project ? "Open the Project workbook to build output" : "No reusable Output Profiles yet"}</h2>
       <p className="muted">{project ? "Choose a worksheet from the Project workbook before creating or applying a profile." : "Create your first Output Profile from a Project so it can be reused safely."}</p>
-      <div className="actions"><Link className="primary" href={project ? `/projects/${project.id}/workbook` : "/projects"}>{project ? "Open workbook" : "Open Projects"}</Link>{!project ? <Link className="secondary" href="/dashboard">Open Dashboard</Link> : null}</div>
+      <div className="actions"><Link className="primary" href={project ? `/projects/${project.id}/workbook` : "/projects"}>{project ? "Open workbook" : "Create from a Project"}</Link>{!project ? <Link className="secondary" href="/dashboard">Open Dashboard</Link> : null}</div>
     </section> : null}
   </>;
 }

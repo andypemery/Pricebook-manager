@@ -11,7 +11,7 @@ import { OutputProfileWorksheets } from "@/components/data-mapper/output-profile
 import { OutputGenerationPanel } from "@/components/data-mapper/output-generation-panel";
 import { useUnsavedProfileProtection } from "@/components/data-mapper/use-unsaved-profile-protection";
 import { useHorizontalPan } from "@/components/data-mapper/use-horizontal-pan";
-import { saveOutputProfileAction } from "@/lib/actions/output-profile.actions";
+import { saveOutputProfileAction, saveOutputProfileAsNewAction } from "@/lib/actions/output-profile.actions";
 import { manuallyResolveProfileField } from "@/lib/data-mapper/output-profiles/compatibility";
 import {
   outputProfileDraftFingerprint,
@@ -208,6 +208,27 @@ export function OutputProfileBuilder({ source, initialDraft, profiles, initialAp
     });
   }
 
+  function saveProfileAsNew(name: string) {
+    if (!canEdit || isSaving || !draft.id || projectId) return;
+    const originalProfileId = draft.id;
+    const submittedDraft = { ...draft, id: null, name };
+    resetSaveState();
+    startSaving(async () => {
+      const result = await saveOutputProfileAsNewAction(originalProfileId, saveInputFromOutputProfileDraft(submittedDraft));
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      const savedDraft = { ...submittedDraft, id: result.profileId };
+      setDraft(savedDraft);
+      setSavedFingerprint(outputProfileDraftFingerprint(savedDraft));
+      setApplication(null);
+      setMessage(result.message);
+      router.replace(`/mapping?profile=${encodeURIComponent(result.profileId)}`);
+      router.refresh();
+    });
+  }
+
   function updateSelectedColumn(changes: Partial<Omit<OutputProfileColumnDraft, "clientId" | "columnType" | "sourceColumnIndex" | "sourceHeading">>) {
     if (!selectedColumn) return;
     setDraft((current) => ({ ...current, columns: updateOutputColumn(current.columns, selectedColumn.clientId, changes) }));
@@ -245,6 +266,7 @@ export function OutputProfileBuilder({ source, initialDraft, profiles, initialAp
         saveDisabled={isSaving || ((draft.id !== null || application !== null) && !isDirty)}
         onNameChange={(name) => { setDraft((current) => ({ ...current, name })); resetSaveState(); }}
         onSave={saveProfile}
+        onSaveAsNew={saveProfileAsNew}
       />
 
       {application ? (

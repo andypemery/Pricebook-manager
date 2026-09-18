@@ -58,6 +58,108 @@ export async function saveOutputProfileAction(input: SaveOutputProfileInput): Pr
   }
 }
 
+export async function saveOutputProfileAsNewAction(originalProfileId: string, input: SaveOutputProfileInput): Promise<SaveOutputProfileResult> {
+  const actor = await requireUser();
+  if (!hasPermission(actor, "editRecords")) return { ok: false, error: "You do not have permission to create Output Profiles." };
+  if (typeof originalProfileId !== "string" || !originalProfileId || originalProfileId.length > 100 || input.projectId) {
+    return { ok: false, error: "The Output Profile is not available." };
+  }
+  try {
+    const profile = await prisma.$transaction(async (transaction) => {
+      const original = await transaction.outputProfile.findFirst({
+        where: { id: originalProfileId, tenantId: actor.tenantId, sourceWorkbookImport: { tenantId: actor.tenantId } },
+        select: { id: true, name: true, sourceWorkbookImportId: true, sourceWorksheetId: true }
+      });
+      const nextName = typeof input.name === "string" ? input.name.trim() : "";
+      if (!original || original.sourceWorkbookImportId !== input.sourceWorkbookImportId || original.sourceWorksheetId !== input.sourceWorksheetId) {
+        throw new OutputProfileNotFoundError("The Output Profile is not available.");
+      }
+      if (!nextName || nextName.localeCompare(original.name.trim(), "en-GB", { sensitivity: "accent" }) === 0) {
+        throw new OutputProfileValidationError("Enter a new Output Profile name that differs from the current profile.");
+      }
+      const duplicateName = await transaction.outputProfile.findFirst({
+        where: { tenantId: actor.tenantId, name: { equals: nextName, mode: "insensitive" } },
+        select: { id: true }
+      });
+      if (duplicateName) throw new OutputProfileValidationError("An Output Profile with this name already exists. Choose a different name.");
+      return saveOutputProfileForTenant(transaction, actor, { ...input, id: null, projectId: undefined, name: nextName });
+    });
+    await audit({
+      tenantId: actor.tenantId,
+      userId: actor.id,
+      action: "OUTPUT_PROFILE_CREATED",
+      entityType: "OutputProfile",
+      entityId: profile.id,
+      after: { name: profile.name, savedAsNewFromId: originalProfileId, outputColumnCount: input.columns.length, filterCount: input.filters.length }
+    });
+    revalidatePath("/mapping");
+    return { ok: true, profileId: profile.id, message: "New Output Profile saved." };
+  } catch (error) {
+    if (error instanceof OutputProfileValidationError || error instanceof OutputProfileNotFoundError) return { ok: false, error: error.message };
+    console.error("[Pricebook Manager] Save Output Profile as new failed", error);
+    return { ok: false, error: "The new Output Profile could not be saved. Please try again." };
+  }
+}
+
+export async function associateOutputProfileWithProjectAction(input: {
+  projectId: string;
+  outputProfileId: string;
+  sourceWorkbookImportId: string;
+  sourceWorksheetId: string;
+}): Promise<OutputProfileMutationResult> {
+  const actor = await requireUser();
+  if (!hasPermission(actor, "editRecords")) return { ok: false, error: "You do not have permission to apply Output Profiles." };
+  if (!input || [input.projectId, input.outputProfileId, input.sourceWorkbookImportId, input.sourceWorksheetId].some((value) => typeof value !== "string" || !value || value.length > 100)) {
+    return { ok: false, error: "The Project or Output Profile is not available." };
+  }
+  try {
+    const result = await prisma.$transaction(async (transaction) => {
+      const [project, profile] = await Promise.all([
+        transaction.project.findFirst({
+          where: {
+            id: input.projectId,
+            tenantId: actor.tenantId,
+            sourceWorkbookImports: { some: { id: input.sourceWorkbookImportId, tenantId: actor.tenantId, worksheets: { some: { id: input.sourceWorksheetId } } } }
+          },
+          select: { id: true }
+        }),
+        transaction.outputProfile.findFirst({
+          where: { id: input.outputProfileId, tenantId: actor.tenantId, sourceWorkbookImport: { tenantId: actor.tenantId } },
+          select: { id: true, name: true }
+        })
+      ]);
+      if (!project || !profile) throw new OutputProfileNotFoundError("The Project or Output Profile is not available.");
+      const existing = await transaction.projectOutputProfile.findUnique({
+        where: { projectId_outputProfileId: { projectId: project.id, outputProfileId: profile.id } },
+        select: { id: true }
+      });
+      const association = existing ?? await transaction.projectOutputProfile.create({
+        data: { tenantId: actor.tenantId, projectId: project.id, outputProfileId: profile.id, createdById: actor.id },
+        select: { id: true }
+      });
+      if (!existing) await transaction.project.update({ where: { id: project.id }, data: { updatedById: actor.id } });
+      return { profile, association, created: !existing };
+    });
+    if (result.created) {
+      await audit({
+        tenantId: actor.tenantId,
+        userId: actor.id,
+        action: "PROJECT_OUTPUT_PROFILE_ASSOCIATED",
+        entityType: "ProjectOutputProfile",
+        entityId: result.association.id,
+        after: { projectId: input.projectId, outputProfileId: input.outputProfileId }
+      });
+    }
+    revalidatePath(`/projects/${input.projectId}`);
+    revalidatePath("/mapping");
+    return { ok: true, profileId: result.profile.id, message: result.created ? "Output Profile added to Project." : "Output Profile is already used in this Project." };
+  } catch (error) {
+    if (error instanceof OutputProfileNotFoundError) return { ok: false, error: error.message };
+    console.error("[Pricebook Manager] Project Output Profile association failed", error);
+    return { ok: false, error: "The Project or Output Profile is not available." };
+  }
+}
+
 export async function duplicateOutputProfileAction(profileId: string, projectId?: string): Promise<OutputProfileMutationResult> {
   const actor = await requireUser();
   if (!hasPermission(actor, "editRecords")) return { ok: false, error: "You do not have permission to duplicate Output Profiles." };

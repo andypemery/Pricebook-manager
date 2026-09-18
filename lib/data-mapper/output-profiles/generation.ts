@@ -8,6 +8,7 @@ import type { GenerateOutputProfileInput, OutputProfileColumnDraft, OutputProfil
 import { stringArrayFromJson, validateOutputProfileInput } from "@/lib/data-mapper/output-profiles/validation";
 import { resolveWorksheetCompatibility, sourceIndexForHeading } from "@/lib/data-mapper/output-profiles/worksheet-compatibility";
 import { loadSourceValidationState, SourceWorkbookUnavailableError } from "@/lib/data-mapper/validation-overrides";
+import { sourceRowKey } from "@/lib/data-mapper/source-row-exclusions";
 
 export class OutputGenerationError extends Error {}
 
@@ -177,6 +178,7 @@ export async function generateOutputForTenant(
     })) as OutputProfileFilterDraft[];
     const rows: string[][] = [];
     for (let rowNumber = item.worksheet.detectedHeaderRow + 1; rowNumber <= sourceSheet.rowCount; rowNumber += 1) {
+      if (validation.excludedRowKeys?.has(sourceRowKey(item.worksheet.name, rowNumber))) continue;
       const row = sourceSheet.getRow(rowNumber);
       const sourceRow = Array.from({ length: item.headers.length }, (_, index) => cellText(row.getCell(index + 1).value));
       if (!sourceRow.some((value) => value.trim())) continue;

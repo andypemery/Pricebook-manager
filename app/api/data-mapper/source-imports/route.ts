@@ -15,10 +15,15 @@ export async function POST(request: Request) {
   }
 
   try {
-    const body = await request.json() as { uploadIntent?: unknown; worksheetName?: unknown; ignoredValidationFingerprints?: unknown };
+    const body = await request.json() as { uploadIntent?: unknown; worksheetName?: unknown; ignoredValidationFingerprints?: unknown; excludedRows?: unknown };
     if (typeof body.uploadIntent !== "string") return NextResponse.json({ error: "Upload the workbook directly to private storage before registering it." }, { status: 400 });
     const requestedWorksheetName = typeof body.worksheetName === "string" ? body.worksheetName : "";
-    const sourceImport = await finaliseSourceWorkbookUpload(prisma, actor, { uploadIntent: body.uploadIntent, worksheetName: requestedWorksheetName, ignoredValidationFingerprints: body.ignoredValidationFingerprints });
+    const sourceImport = await finaliseSourceWorkbookUpload(prisma, actor, {
+      uploadIntent: body.uploadIntent,
+      worksheetName: requestedWorksheetName,
+      ignoredValidationFingerprints: body.ignoredValidationFingerprints,
+      excludedRows: body.excludedRows
+    });
     const selectedWorksheet = sourceImport.worksheets.find((worksheet) => worksheet.name === requestedWorksheetName) ?? sourceImport.worksheets[0];
     if (!selectedWorksheet) return NextResponse.json({ error: "The workbook does not contain a worksheet available for Output Profiles." }, { status: 400 });
     await audit({
@@ -29,6 +34,19 @@ export async function POST(request: Request) {
       entityId: sourceImport.id,
       after: { originalFileName: sourceImport.originalFileName, worksheetCount: sourceImport.worksheets.length }
     });
+    if (sourceImport.verifiedExcludedRows.length > 0) {
+      await audit({
+        tenantId: actor.tenantId,
+        userId: actor.id,
+        action: "SOURCE_ROWS_EXCLUDED",
+        entityType: "SourceWorkbookImport",
+        entityId: sourceImport.id,
+        after: {
+          count: sourceImport.verifiedExcludedRows.length,
+          worksheetNames: [...new Set(sourceImport.verifiedExcludedRows.map((row) => row.worksheetName))]
+        }
+      });
+    }
     return NextResponse.json({
       sourceWorkbookImportId: sourceImport.id,
       sourceWorksheetId: selectedWorksheet.id,
