@@ -35,10 +35,20 @@ function newImportDatabase() {
     };
   });
   const createValidationOverrides = vi.fn(async () => ({ count: 1 }));
-  const transactionClient = { fileReference: { create: createFileReference }, sourceWorkbookImport: { create: createSourceImport }, validationIssueOverride: { createMany: createValidationOverrides } };
+  const projectFindFirst = vi.fn(async () => ({ id: "project-1", sourceWorkbookImports: [] as Array<{ id: string }> }));
+  const transactionClient = {
+    fileReference: { create: createFileReference },
+    sourceWorkbookImport: { create: createSourceImport },
+    validationIssueOverride: { createMany: createValidationOverrides },
+    project: { update: vi.fn(async () => ({ id: "project-1" })) }
+  };
   const transaction = vi.fn(async (callback: (client: typeof transactionClient) => Promise<unknown>) => callback(transactionClient));
-  const db = { sourceWorkbookImport: { findFirst }, $transaction: transaction } as unknown as PrismaClient;
-  return { db, createFileReference, createSourceImport, createValidationOverrides, transaction, findFirst };
+  const db = {
+    project: { findFirst: projectFindFirst },
+    sourceWorkbookImport: { findFirst },
+    $transaction: transaction
+  } as unknown as PrismaClient;
+  return { db, createFileReference, createSourceImport, createValidationOverrides, transaction, findFirst, projectFindFirst };
 }
 
 async function authoriseAndUpload(options: {
@@ -54,6 +64,7 @@ async function authoriseAndUpload(options: {
     fileName,
     fileSizeBytes: options.bytes.byteLength,
     contentType,
+    projectId: "project-1",
     replaceSourceWorkbookImportId: options.replaceSourceWorkbookImportId
   }, { storage, secret: intentSecret, now, uploadId: "11111111-1111-4111-8111-111111111111" });
   await storage.uploadDirect({ uploadUrl: authorisation.uploadUrl, bytes: options.bytes, contentType, now });
@@ -91,7 +102,8 @@ describe("source workbook direct-upload finalisation", () => {
     const authorisation = await authoriseSourceWorkbookUpload(db, actor, {
       fileName: "pricebook.xlsx",
       fileSizeBytes: bytes.byteLength,
-      contentType: sourceWorkbookContentTypes.xlsx
+      contentType: sourceWorkbookContentTypes.xlsx,
+      projectId: "project-1"
     }, { storage, secret: intentSecret, now });
 
     await expect(finaliseSourceWorkbookUpload(db, actor, { uploadIntent: authorisation.uploadIntent }, { storage, secret: intentSecret, now }))
@@ -166,16 +178,18 @@ describe("source workbook direct-upload finalisation", () => {
   });
 
   it("treats a completed registration retry as idempotent", async () => {
-    const { db, createSourceImport, findFirst } = newImportDatabase();
+    const { db, createSourceImport, findFirst, projectFindFirst } = newImportDatabase();
     const bytes = await workbookBytes();
     const { storage, authorisation } = await authoriseAndUpload({ db, bytes });
     const first = await finaliseSourceWorkbookUpload(db, actor, { uploadIntent: authorisation.uploadIntent }, { storage, secret: intentSecret, now });
     findFirst.mockResolvedValueOnce({
       id: first.id,
+      projectId: "project-1",
       originalFileName: "pricebook.xlsx",
       fileReference: { id: "file-1", storageKey: "source-workbooks/tenant-1/11111111-1111-4111-8111-111111111111/original.xlsx" },
       worksheets: first.worksheets
     });
+    projectFindFirst.mockResolvedValueOnce({ id: "project-1", sourceWorkbookImports: [{ id: first.id }] });
 
     const retried = await finaliseSourceWorkbookUpload(db, actor, { uploadIntent: authorisation.uploadIntent }, { storage, secret: intentSecret, now });
     expect(retried.id).toBe(first.id);
@@ -185,6 +199,7 @@ describe("source workbook direct-upload finalisation", () => {
   it("keeps a valid uploaded object available when database registration fails so finalisation can be retried", async () => {
     const bytes = await workbookBytes();
     const failingDb = {
+      project: { findFirst: vi.fn(async () => ({ id: "project-1", sourceWorkbookImports: [] })) },
       sourceWorkbookImport: { findFirst: vi.fn(async () => null) },
       $transaction: vi.fn(async () => { throw new Error("database temporarily unavailable"); })
     } as unknown as PrismaClient;
@@ -198,5 +213,17 @@ describe("source workbook direct-upload finalisation", () => {
     const { db: recoveredDb } = newImportDatabase();
     await expect(finaliseSourceWorkbookUpload(recoveredDb, actor, { uploadIntent: authorisation.uploadIntent }, { storage, secret: intentSecret, now }))
       .resolves.toMatchObject({ id: "11111111-1111-4111-8111-111111111111" });
+  });
+
+  it("rejects and cleans up a raced new upload if the Project gains a current workbook before finalisation", async () => {
+    const { db, transaction, projectFindFirst } = newImportDatabase();
+    const bytes = await workbookBytes();
+    const { storage, authorisation } = await authoriseAndUpload({ db, bytes });
+    projectFindFirst.mockResolvedValueOnce({ id: "project-1", sourceWorkbookImports: [{ id: "source-existing" }] });
+
+    await expect(finaliseSourceWorkbookUpload(db, actor, { uploadIntent: authorisation.uploadIntent }, { storage, secret: intentSecret, now }))
+      .rejects.toThrow("Use Replace workbook");
+    expect(transaction).not.toHaveBeenCalled();
+    expect(await storage.head("source-workbooks/tenant-1/11111111-1111-4111-8111-111111111111/original.xlsx")).toBeNull();
   });
 });

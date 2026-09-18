@@ -177,6 +177,8 @@ model Tenant {
   usageSnapshots        UsageSnapshot[]
   sourceWorkbookImports SourceWorkbookImport[]
   outputProfiles        OutputProfile[]
+  projects              Project[]
+  projectOutputProfiles ProjectOutputProfile[]
   validationIssueOverrides ValidationIssueOverride[]
 
   @@index([status])
@@ -219,6 +221,9 @@ model User {
   outputProfilesCreated        OutputProfile[]                @relation("OutputProfileCreator")
   outputProfilesUpdated        OutputProfile[]                @relation("OutputProfileUpdater")
   ignoredValidationIssues      ValidationIssueOverride[]      @relation("ValidationIssueOverrideActor")
+  projectsCreated              Project[]                      @relation("ProjectCreator")
+  projectsUpdated              Project[]                      @relation("ProjectUpdater")
+  projectOutputProfilesCreated ProjectOutputProfile[]         @relation("ProjectOutputProfileCreator")
 
   @@index([tenantId])
   @@index([role])
@@ -693,6 +698,8 @@ model SourceWorkbookImport {
   id                String         @id @default(cuid())
   tenantId          String
   tenant            Tenant         @relation(fields: [tenantId], references: [id])
+  projectId         String
+  project           Project        @relation(fields: [projectId], references: [id])
   fileReferenceId   String?
   fileReference     FileReference? @relation(fields: [fileReferenceId], references: [id], onDelete: SetNull)
   originalFileName  String
@@ -710,7 +717,44 @@ model SourceWorkbookImport {
   validationIssueOverrides ValidationIssueOverride[]
 
   @@index([tenantId, createdAt])
+  @@index([tenantId, projectId, updatedAt])
   @@index([fileReferenceId])
+}
+
+model Project {
+  id          String   @id @default(cuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  name        String
+  createdById String?
+  createdBy   User?    @relation("ProjectCreator", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   User?    @relation("ProjectUpdater", fields: [updatedById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  sourceWorkbookImports SourceWorkbookImport[]
+  outputProfiles        ProjectOutputProfile[]
+
+  @@index([tenantId, updatedAt])
+}
+
+model ProjectOutputProfile {
+  id              String        @id @default(cuid())
+  tenantId        String
+  tenant          Tenant        @relation(fields: [tenantId], references: [id])
+  projectId       String
+  project         Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  outputProfileId String
+  outputProfile   OutputProfile @relation(fields: [outputProfileId], references: [id], onDelete: Cascade)
+  createdById     String?
+  createdBy       User?         @relation("ProjectOutputProfileCreator", fields: [createdById], references: [id])
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@unique([projectId, outputProfileId])
+  @@index([tenantId, projectId])
+  @@index([tenantId, outputProfileId])
 }
 
 // Sparse, tenant-scoped acknowledgements only. Validation results remain derived
@@ -777,6 +821,7 @@ model OutputProfile {
 
   columns OutputProfileColumn[]
   filters OutputProfileFilterRule[]
+  projects ProjectOutputProfile[]
 
   @@index([tenantId, updatedAt])
   @@index([sourceWorkbookImportId])

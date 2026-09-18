@@ -14,6 +14,7 @@ import type { OutputProfileDraft, SourceWorksheetPreview } from "../lib/data-map
 
 const source: SourceWorksheetPreview = {
   id: "sheet-1",
+  projectId: "project-1",
   sourceWorkbookImportId: "source-1",
   workbookFileName: "Long supplier workbook.xlsx",
   worksheetName: "HP Print",

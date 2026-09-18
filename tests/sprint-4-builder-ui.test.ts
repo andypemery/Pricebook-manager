@@ -12,6 +12,7 @@ import type { OutputProfileDraft, SourceWorksheetPreview } from "../lib/data-map
 
 const source: SourceWorksheetPreview = {
   id: "worksheet-1",
+  projectId: "project-1",
   sourceWorkbookImportId: "source-1",
   workbookFileName: "Supplier.xlsx",
   worksheetName: "Products",
@@ -49,6 +50,7 @@ describe("Sprint 4 output-heading controls", () => {
         sourceWorksheetId: "worksheet-1",
         outputFormat: "CSV",
         outputColumnCount: 2,
+        updatedAt: "2026-09-16T09:00:00.000Z",
         originWorkbookFileName: "Supplier.xlsx",
         originWorksheetName: "Products"
       }],
@@ -70,8 +72,13 @@ describe("Sprint 4 output-heading controls", () => {
     expect(markup).toContain("Current Output Profile context");
     expect(markup).toContain("Supplier.xlsx");
     expect(markup).toContain("Products");
-    expect(markup).toContain("Apply saved profile to this worksheet");
-    expect(markup).toContain("Originally created from Supplier.xlsx · Products");
+    expect(markup.match(/<span>Output Profile<\/span>/g)).toHaveLength(1);
+    expect(markup).not.toContain("Apply saved profile to this worksheet");
+    expect(markup).not.toContain("Currently editing");
+    expect(markup).toContain("New Output Profile");
+    expect(markup).toContain("Duplicate");
+    expect(markup).toContain("Rename");
+    expect(markup).toContain("Delete");
   });
 
   it("shows compact manual matching when an applied profile field is unresolved", () => {

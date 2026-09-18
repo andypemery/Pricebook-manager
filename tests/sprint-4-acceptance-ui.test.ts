@@ -33,11 +33,11 @@ describe("Sprint 4 acceptance navigation and resume workflow", () => {
   it("shows only functional main navigation destinations", () => {
     expect(navigationItems.map((item) => [item.label, item.href])).toEqual([
       ["Dashboard", "/dashboard"],
-      ["Workbook", "/workbook"],
+      ["Projects", "/projects"],
       ["Output Profiles", "/mapping"],
       ["Settings", "/settings"]
     ]);
-    expect(navigationItems.map((item) => item.label)).not.toContain("Projects");
+    expect(navigationItems.map((item) => item.label)).not.toContain("Workbook");
     expect(navigationItems.map((item) => item.label)).not.toContain("Demo Records");
     expect(navigationItems.map((item) => item.label)).not.toContain("Account");
     for (const item of navigationItems) {
@@ -239,15 +239,19 @@ describe("Sprint 4 acceptance filter and output settings UI", () => {
 });
 
 describe("Sprint 4 current Output Profile page cleanup", () => {
-  it("keeps compact recent workbooks on Dashboard and removes source libraries from the current editor", () => {
+  it("keeps reusable masters separate while Dashboard resumes Projects instead of workbooks", () => {
     const mappingPage = readFileSync(new URL("../app/(app)/mapping/page.tsx", import.meta.url), "utf8");
     const dashboardPage = readFileSync(new URL("../app/(app)/dashboard/page.tsx", import.meta.url), "utf8");
     const workspace = readFileSync(new URL("../components/data-mapper/output-profile-workspace.tsx", import.meta.url), "utf8");
 
     expect(mappingPage).not.toContain("OutputProfileWorkspace");
     expect(mappingPage).not.toContain("Recent workbooks");
-    expect(mappingPage).toContain("Choose a workbook to build or apply an Output Profile");
-    expect(dashboardPage).toContain("OutputProfileWorkspace");
+    expect(mappingPage).toContain("Saved Output Profiles");
+    expect(mappingPage).toContain("Reusable master templates");
+    expect(dashboardPage).not.toContain("OutputProfileWorkspace");
+    expect(dashboardPage).not.toContain("Recent Workbooks");
+    expect(dashboardPage).toContain("Continue Working");
+    expect(dashboardPage).toContain("New Project");
     expect(workspace).toContain("Recent workbooks");
     expect(workspace).not.toContain("sourceWorksheetChoices");
     expect(workspace).toContain("worksheetResumeHref");

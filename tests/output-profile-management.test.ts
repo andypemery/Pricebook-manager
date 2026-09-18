@@ -99,7 +99,7 @@ describe("reusable Output Profile management", () => {
 
     expect(remove).toHaveBeenCalledWith({ where: { id: "profile-1" } });
     expect(sourceDelete).not.toHaveBeenCalled();
-    expect((db.outputProfile.findFirst as ReturnType<typeof vi.fn>).mock.calls[0]?.[0].where).toEqual({ id: "profile-1", tenantId: "tenant-1" });
+    expect((db.outputProfile.findFirst as ReturnType<typeof vi.fn>).mock.calls[0]?.[0].where).toEqual({ id: "profile-1", tenantId: "tenant-1", sourceWorkbookImport: { tenantId: "tenant-1" } });
   });
 
   it("rejects cross-tenant deletion before the delete operation", async () => {
@@ -136,6 +136,7 @@ describe("reusable Output Profile management", () => {
       sourceWorkbookImportId: "source-1",
       sourceWorksheetId: "worksheet-1",
       outputFormat: "CSV",
+      updatedAt: new Date("2026-09-17T09:00:00Z"),
       _count: { columns: 3 },
       sourceWorkbookImport: { originalFileName: "August.xlsx" },
       sourceWorksheet: { name: "Products" }
@@ -149,10 +150,11 @@ describe("reusable Output Profile management", () => {
       sourceWorksheetId: "worksheet-1",
       outputFormat: "CSV",
       outputColumnCount: 3,
+      updatedAt: "2026-09-17T09:00:00.000Z",
       originWorkbookFileName: "August.xlsx",
       originWorksheetName: "Products"
     }]);
-    expect(findMany.mock.calls[0]?.[0].where).toEqual({ tenantId: "tenant-1" });
+    expect(findMany.mock.calls[0]?.[0].where).toEqual({ tenantId: "tenant-1", sourceWorkbookImport: { tenantId: "tenant-1" } });
     expect(findMany.mock.calls[0]?.[0].select).not.toHaveProperty("sourceWorkbookImport.worksheets");
   });
 
@@ -182,8 +184,8 @@ describe("reusable Output Profile management", () => {
     expect(firstDraft?.draft.columns[0].outputHeading).toBe("MATERIAL");
     expect(secondDraft?.draft.columns[0].outputHeading).toBe("CODE");
     expect(findFirst.mock.calls.map((call) => call[0].where)).toEqual([
-      { id: "profile-1", tenantId: "tenant-1" },
-      { id: "profile-2", tenantId: "tenant-1" }
+      { id: "profile-1", tenantId: "tenant-1", sourceWorkbookImport: { tenantId: "tenant-1" } },
+      { id: "profile-2", tenantId: "tenant-1", sourceWorkbookImport: { tenantId: "tenant-1" } }
     ]);
   });
 
@@ -227,7 +229,7 @@ describe("reusable Output Profile management", () => {
       sourceWorkbookImportId: "source-new",
       sourceWorkbookImport: { tenantId: "tenant-1" }
     });
-    expect(profileFindFirst.mock.calls[0]?.[0].where).toEqual({ id: "profile-1", tenantId: "tenant-1" });
+    expect(profileFindFirst.mock.calls[0]?.[0].where).toEqual({ id: "profile-1", tenantId: "tenant-1", sourceWorkbookImport: { tenantId: "tenant-1" } });
     expect(create).not.toHaveBeenCalled();
     expect(update).not.toHaveBeenCalled();
     expect(profile.columns[0].sourceColumnIndex).toBe(0);

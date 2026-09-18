@@ -26,7 +26,10 @@ describe("Output Profile field alignment", () => {
     expect(source).toContain("Source heading");
     expect(source).toContain("readOnly");
     expect(css).toMatch(/\.outputColumnFields\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/s);
-    expect(css).toMatch(/\.outputColumnsWorkspace\s*\{[^}]*grid-template-columns:\s*minmax\(0, 3fr\)\s+minmax\(270px, 1fr\)/s);
+    expect(css).toMatch(/\.outputColumnsWorkspace\s*\{[^}]*display:\s*block/s);
+    expect(css).toMatch(/\.outputColumnsWorkspace > \.outputColumnInspector\s*\{[^}]*margin-top:\s*12px/s);
+    expect(css).toMatch(/\.outputColumnFields\.source\s*\{[^}]*grid-template-columns:\s*repeat\(5, minmax\(0, 1fr\)\)/s);
+    expect(css).toMatch(/\.outputColumnFields\.static\s*\{[^}]*grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\)/s);
     expect(css).toContain(".sourceHeadingField > span { white-space: nowrap;");
     expect(css).toContain(".sourceHeadingField input[readonly]");
     expect(css).toContain(".outputColumnFields { display: grid; grid-template-columns: minmax(0, 1fr);");

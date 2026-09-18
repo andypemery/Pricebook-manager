@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import type ExcelJS from "exceljs";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowDownUp, FileSpreadsheet, LoaderCircle, Search, Upload } from "lucide-react";
 import type { UploadedWorkbookDetails, ValidationIssueCategory, WorkbookSummary, WorkbookValidationResult, WorksheetPreview } from "@/lib/data-mapper/types";
@@ -83,7 +84,7 @@ export function visibleRows(preview: WorksheetPreview | null, searchTerm: string
   });
 }
 
-export function WorkbookImporter({ canPrepareOutputProfiles }: { canPrepareOutputProfiles: boolean }) {
+export function WorkbookImporter({ canPrepareOutputProfiles, projectId, projectName, replaceSourceWorkbookImportId }: { canPrepareOutputProfiles: boolean; projectId: string; projectName: string; replaceSourceWorkbookImportId?: string }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -185,7 +186,7 @@ export function WorkbookImporter({ canPrepareOutputProfiles }: { canPrepareOutpu
     setUploadProgress(0);
     setProfileError(null);
     try {
-      const result = await uploadSourceWorkbookDirectly(selectedFile, { worksheetName: selectedWorksheetName, ignoredValidationFingerprints: [...ignoredFingerprints], onProgress: setUploadProgress });
+      const result = await uploadSourceWorkbookDirectly(selectedFile, { projectId, worksheetName: selectedWorksheetName, replaceSourceWorkbookImportId, ignoredValidationFingerprints: [...ignoredFingerprints], onProgress: setUploadProgress });
       router.push(result.mappingUrl);
     } catch (profilePreparationError) {
       setProfileError(profilePreparationError instanceof Error ? profilePreparationError.message : "The workbook could not be prepared for an Output Profile.");
@@ -199,11 +200,11 @@ export function WorkbookImporter({ canPrepareOutputProfiles }: { canPrepareOutpu
       <section className="hero">
         <div className="splitHero">
           <div>
-            <p className="breadcrumb">Workbook Explorer</p>
-            <h1>Excel import engine</h1>
+            <p className="breadcrumb"><Link href="/projects">Projects</Link> › <Link href={`/projects/${projectId}`}>{projectName}</Link> › Workbook</p>
+            <h1>{replaceSourceWorkbookImportId ? "Replace workbook" : "Workbook Explorer"}</h1>
             <p>Import Excel workbooks, inspect worksheet structure and preview the first 100 data rows before mapping or validation.</p>
           </div>
-          <div className="actions">{summary ? <span className="badge success">Workbook loaded</span> : <span className="badge">Ready for upload</span>}</div>
+          <div className="actions"><Link className="secondary" href={`/projects/${projectId}`}>Project</Link>{summary ? <span className="badge success">Workbook loaded</span> : <span className="badge">Ready for upload</span>}</div>
         </div>
       </section>
 

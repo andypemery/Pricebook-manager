@@ -242,7 +242,7 @@ describe("Output Profile persistence", () => {
     expect(result?.draft.filterMatchMode).toBe("ANY");
     expect(result?.draft).toMatchObject({ filenameTemplate: "NHS_{month}_{year}", outputFormat: "CSV", csvDelimiter: "PIPE", csvIncludeHeader: false, xlsxWorksheetName: "" });
     expect(result?.draft.filters[0]).toMatchObject({ sourceHeading: "Description", operator: "CONTAINS", comparisonValue: "Alpha" });
-    expect(findFirst.mock.calls[0]?.[0].where).toEqual({ id: "profile-1", tenantId: "tenant-1" });
+    expect(findFirst.mock.calls[0]?.[0].where).toEqual({ id: "profile-1", tenantId: "tenant-1", sourceWorkbookImport: { tenantId: "tenant-1" } });
     expect(findFirst.mock.calls[0]?.[0].select.sourceWorksheet.select).toEqual({ id: true, name: true, headers: true, sampleRows: true });
   });
 

@@ -32,7 +32,8 @@ export async function POST(request: Request) {
     return NextResponse.json({
       sourceWorkbookImportId: sourceImport.id,
       sourceWorksheetId: selectedWorksheet.id,
-      mappingUrl: `/mapping?source=${encodeURIComponent(sourceImport.id)}&worksheet=${encodeURIComponent(selectedWorksheet.id)}`
+      projectId: sourceImport.projectId,
+      mappingUrl: `/mapping?project=${encodeURIComponent(sourceImport.projectId)}&source=${encodeURIComponent(sourceImport.id)}&worksheet=${encodeURIComponent(selectedWorksheet.id)}`
     }, { status: 201 });
   } catch (error) {
     if (error instanceof SourceWorkbookImportError || error instanceof SourceWorkbookUploadError) return NextResponse.json({ error: error.message }, { status: 400 });

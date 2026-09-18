@@ -13,8 +13,10 @@ import { normaliseWorksheetIdentity } from "@/lib/data-mapper/output-profiles/co
 
 export class OutputProfileNotFoundError extends Error {}
 
+type OutputProfileMutationDatabase = Pick<PrismaClient, "outputProfile" | "sourceWorksheet">;
+
 export async function saveOutputProfileForTenant(
-  db: PrismaClient,
+  db: OutputProfileMutationDatabase,
   actor: { id: string; tenantId: string },
   input: SaveOutputProfileInput
 ) {
@@ -27,7 +29,7 @@ export async function saveOutputProfileForTenant(
     select: {
       name: true,
       headers: true,
-      sourceWorkbookImport: { select: { originalFileName: true, worksheets: { orderBy: { position: "asc" }, select: { name: true } } } }
+      sourceWorkbookImport: { select: { originalFileName: true, projectId: true, worksheets: { orderBy: { position: "asc" }, select: { name: true } } } }
     }
   });
   if (!sourceWorksheet) throw new OutputProfileNotFoundError("The selected source worksheet is not available.");
@@ -125,16 +127,18 @@ export async function listOutputProfileWorkspace(db: PrismaClient, tenantId: str
   return { profiles, sourceImports };
 }
 
-export async function listReusableOutputProfiles(db: PrismaClient, tenantId: string): Promise<OutputProfileSummary[]> {
+export async function listReusableOutputProfiles(db: PrismaClient, tenantId: string, take?: number): Promise<OutputProfileSummary[]> {
   const profiles = await db.outputProfile.findMany({
-    where: { tenantId },
+    where: { tenantId, sourceWorkbookImport: { tenantId } },
     orderBy: { updatedAt: "desc" },
+    ...(take ? { take } : {}),
     select: {
       id: true,
       name: true,
       outputFormat: true,
       sourceWorkbookImportId: true,
       sourceWorksheetId: true,
+      updatedAt: true,
       _count: { select: { columns: true } },
       sourceWorkbookImport: { select: { originalFileName: true } },
       sourceWorksheet: { select: { name: true } }
@@ -147,9 +151,18 @@ export async function listReusableOutputProfiles(db: PrismaClient, tenantId: str
     sourceWorksheetId: profile.sourceWorksheetId,
     outputFormat: profile.outputFormat,
     outputColumnCount: profile._count.columns,
+    updatedAt: profile.updatedAt.toISOString(),
     originWorkbookFileName: profile.sourceWorkbookImport.originalFileName,
     originWorksheetName: profile.sourceWorksheet.name
   }));
+}
+
+export async function listProjectOutputProfiles(db: PrismaClient, tenantId: string, projectId: string): Promise<OutputProfileSummary[]> {
+  const associations = await db.projectOutputProfile.findMany({
+    where: { tenantId, projectId, project: { tenantId }, outputProfile: { tenantId, sourceWorkbookImport: { tenantId } } }, orderBy: { updatedAt: "desc" },
+    select: { outputProfile: { select: { id: true, name: true, outputFormat: true, sourceWorkbookImportId: true, sourceWorksheetId: true, updatedAt: true, _count: { select: { columns: true } }, sourceWorkbookImport: { select: { originalFileName: true } }, sourceWorksheet: { select: { name: true } } } } }
+  });
+  return associations.map(({ outputProfile: profile }) => ({ id: profile.id, name: profile.name, sourceWorkbookImportId: profile.sourceWorkbookImportId, sourceWorksheetId: profile.sourceWorksheetId, outputFormat: profile.outputFormat, outputColumnCount: profile._count.columns, updatedAt: profile.updatedAt.toISOString(), originWorkbookFileName: profile.sourceWorkbookImport.originalFileName, originWorksheetName: profile.sourceWorksheet.name }));
 }
 
 export async function loadOutputProfileBuilder(
@@ -159,7 +172,7 @@ export async function loadOutputProfileBuilder(
 ): Promise<{ source: SourceWorksheetPreview; draft: OutputProfileDraft; application?: AppliedOutputProfileContext } | null> {
   if (selection.profileId) {
     const profile = await db.outputProfile.findFirst({
-      where: { id: selection.profileId, tenantId },
+      where: { id: selection.profileId, tenantId, sourceWorkbookImport: { tenantId } },
       select: {
         id: true,
         name: true,
@@ -195,6 +208,7 @@ export async function loadOutputProfileBuilder(
         sourceWorkbookImport: {
           select: {
             originalFileName: true,
+            projectId: true,
             worksheets: { orderBy: { position: "asc" }, select: { id: true, name: true, position: true, headers: true } }
           }
         },
@@ -258,6 +272,7 @@ export async function loadOutputProfileBuilder(
     return {
       source: {
         id: profile.sourceWorksheet.id,
+        projectId: profile.sourceWorkbookImport.projectId,
         sourceWorkbookImportId: profile.sourceWorkbookImportId,
         workbookFileName: profile.sourceWorkbookImport.originalFileName,
         worksheetName: profile.sourceWorksheet.name,
@@ -286,6 +301,7 @@ export async function loadOutputProfileBuilder(
         sourceWorkbookImport: {
           select: {
             originalFileName: true,
+            projectId: true,
             worksheets: { orderBy: { position: "asc" }, select: { id: true, name: true, position: true, headers: true } }
           }
         }
@@ -304,6 +320,7 @@ export async function loadOutputProfileBuilder(
   }));
   const source = {
     id: worksheet.id,
+    projectId: worksheet.sourceWorkbookImport.projectId,
     sourceWorkbookImportId: worksheet.sourceWorkbookImportId,
     workbookFileName: worksheet.sourceWorkbookImport.originalFileName,
     worksheetName: worksheet.name,
@@ -367,12 +384,12 @@ function duplicatedProfileName(name: string) {
 }
 
 export async function duplicateOutputProfileForTenant(
-  db: PrismaClient,
+  db: OutputProfileMutationDatabase,
   actor: { id: string; tenantId: string },
   profileId: string
 ) {
   const profile = await db.outputProfile.findFirst({
-    where: { id: profileId, tenantId: actor.tenantId },
+    where: { id: profileId, tenantId: actor.tenantId, sourceWorkbookImport: { tenantId: actor.tenantId } },
     select: {
       name: true,
       filenameTemplate: true,
@@ -437,7 +454,7 @@ function jsonStringRecord(value: unknown): Record<string, string> {
 
 export async function deleteOutputProfileForTenant(db: PrismaClient, tenantId: string, profileId: string) {
   const profile = await db.outputProfile.findFirst({
-    where: { id: profileId, tenantId },
+    where: { id: profileId, tenantId, sourceWorkbookImport: { tenantId } },
     select: { id: true, name: true, sourceWorkbookImportId: true, sourceWorksheetId: true }
   });
   if (!profile) throw new OutputProfileNotFoundError("The Output Profile is not available.");

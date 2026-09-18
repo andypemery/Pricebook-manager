@@ -24,6 +24,8 @@ export function OutputProfileManager({
   currentProfileName,
   isDirty,
   canEdit,
+  projectId,
+  projectName,
   isBusy,
   saveMessage,
   saveError,
@@ -42,6 +44,8 @@ export function OutputProfileManager({
   currentProfileName: string;
   isDirty: boolean;
   canEdit: boolean;
+  projectId?: string;
+  projectName?: string;
   isBusy: boolean;
   saveMessage: string | null;
   saveError: string | null;
@@ -56,25 +60,22 @@ export function OutputProfileManager({
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [pendingIntent, setPendingIntent] = useState<ProfileContextIntent | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [profileToApply, setProfileToApply] = useState(appliedProfileId ?? profiles[0]?.id ?? "");
-  const newProfileUrl = `/mapping?source=${encodeURIComponent(sourceWorkbookImportId)}&worksheet=${encodeURIComponent(sourceWorksheetId)}`;
-  const selectedReusableProfile = profiles.find((profile) => profile.id === profileToApply) ?? null;
-  const profilesFromCurrentSource = profiles.filter((profile) => profile.sourceWorkbookImportId === sourceWorkbookImportId && profile.sourceWorksheetId === sourceWorksheetId);
-  const applyProfileUrl = selectedReusableProfile
-    ? `${newProfileUrl}&apply=${encodeURIComponent(selectedReusableProfile.id)}`
-    : null;
+  const projectQuery = projectId ? `project=${encodeURIComponent(projectId)}&` : "";
+  const newProfileUrl = `/mapping?${projectQuery}source=${encodeURIComponent(sourceWorkbookImportId)}&worksheet=${encodeURIComponent(sourceWorksheetId)}`;
+  const profilesFromCurrentSource = projectId ? profiles : profiles.filter((profile) => profile.sourceWorkbookImportId === sourceWorkbookImportId && profile.sourceWorksheetId === sourceWorksheetId);
+  const selectedProfileId = activeProfileId ?? appliedProfileId;
   const confirmationOpen = pendingIntent !== null || confirmingDelete;
 
   function duplicateProfile() {
-    if (!activeProfileId || isPending || isBusy) return;
+    if (!selectedProfileId || isPending || isBusy) return;
     setError(null);
     startTransition(async () => {
-      const result = await duplicateOutputProfileAction(activeProfileId);
+      const result = await duplicateOutputProfileAction(selectedProfileId, projectId);
       if (!result.ok) {
         setError(result.error);
         return;
       }
-      router.push(`/mapping?profile=${encodeURIComponent(result.profileId)}`);
+      router.push(projectId ? `${newProfileUrl}&apply=${encodeURIComponent(result.profileId)}` : `/mapping?profile=${encodeURIComponent(result.profileId)}`);
       router.refresh();
     });
   }
@@ -85,7 +86,7 @@ export function OutputProfileManager({
       return;
     }
     if (intent.type === "SWITCH") {
-      router.push(`/mapping?profile=${encodeURIComponent(intent.profileId)}`);
+      router.push(projectId ? `${newProfileUrl}&apply=${encodeURIComponent(intent.profileId)}` : `/mapping?profile=${encodeURIComponent(intent.profileId)}`);
       return;
     }
     duplicateProfile();
@@ -119,7 +120,9 @@ export function OutputProfileManager({
         return;
       }
       const nextProfile = profiles.find((profile) => profile.id !== activeProfileId);
-      router.replace(nextProfile ? `/mapping?profile=${encodeURIComponent(nextProfile.id)}` : newProfileUrl);
+      router.replace(nextProfile
+        ? projectId ? `${newProfileUrl}&apply=${encodeURIComponent(nextProfile.id)}` : `/mapping?profile=${encodeURIComponent(nextProfile.id)}`
+        : newProfileUrl);
       router.refresh();
     });
   }
@@ -141,26 +144,29 @@ export function OutputProfileManager({
         </div>
       </div>
       <div className="workspaceContext" aria-label="Current Output Profile context">
+        {projectName ? <div><span>Project</span><strong title={projectName}>{projectName}</strong></div> : null}
         <div><span>Source workbook</span><strong title={sourceFilename}>{sourceFilename}</strong></div>
         <div><span>Reference worksheet</span><strong title={sourceWorksheetName}>{sourceWorksheetName}</strong></div>
         <div><span>Profile status</span><strong>{activeProfileId ? "Reusable saved profile" : appliedProfileId ? "Applied profile draft" : "New profile draft"}</strong></div>
       </div>
       <div className="profileManagerControls">
         <label className="field profileSelector">
-          <span>Currently editing</span>
-          <select value={activeProfileId ?? ""} disabled={confirmationOpen || isBusy} onChange={(event) => {
+          <span>Output Profile</span>
+          <select value={selectedProfileId ?? ""} disabled={confirmationOpen || isBusy} onChange={(event) => {
             const profileId = event.target.value;
             if (profileId) requestContextIntent({ type: "SWITCH", profileId });
           }}>
-            {!activeProfileId ? <option value="">{appliedProfileId ? `Using ${currentProfileName}` : "New unsaved profile"}</option> : null}
+            {!selectedProfileId ? <option value="">New unsaved profile</option> : null}
+            {selectedProfileId && !profilesFromCurrentSource.some((profile) => profile.id === selectedProfileId) ? <option value={selectedProfileId}>{currentProfileName}</option> : null}
             {profilesFromCurrentSource.map((profile) => <option value={profile.id} key={profile.id}>{profile.name} · {profile.outputFormat}</option>)}
           </select>
         </label>
         <div className="profileManagerActions">
-          <button className="secondary" type="button" onClick={() => requestContextIntent({ type: "NEW" })} disabled={!canEdit || !activeProfileId || isPending || isBusy || confirmationOpen}>
+          {projectId ? <Link className="secondary" href={`/projects/${projectId}#output-profiles`}>Add profile</Link> : null}
+          <button className="secondary" type="button" onClick={() => requestContextIntent({ type: "NEW" })} disabled={!canEdit || !selectedProfileId || isPending || isBusy || confirmationOpen}>
             <Plus aria-hidden="true" size={16} /> New Output Profile
           </button>
-          <button className="secondary" type="button" onClick={() => requestContextIntent({ type: "DUPLICATE" })} disabled={!canEdit || !activeProfileId || isPending || isBusy || confirmationOpen}>
+          <button className="secondary" type="button" onClick={() => requestContextIntent({ type: "DUPLICATE" })} disabled={!canEdit || !selectedProfileId || isPending || isBusy || confirmationOpen}>
             <Copy aria-hidden="true" size={16} /> Duplicate
           </button>
           <button className="secondary" type="button" onClick={() => { profileNameInput.current?.focus(); profileNameInput.current?.select(); }} disabled={!canEdit || isPending || isBusy || confirmationOpen}>
@@ -169,25 +175,10 @@ export function OutputProfileManager({
           <button className="dangerButton" type="button" onClick={() => setConfirmingDelete(true)} disabled={!canEdit || !activeProfileId || isPending || isBusy || confirmationOpen}>
             <Trash2 aria-hidden="true" size={16} /> Delete
           </button>
-          <Link className="secondary" href="/dashboard">Dashboard</Link>
-          <Link className="secondary" href="/workbook">Workbook Explorer</Link>
+          <Link className="secondary" href={projectId ? `/projects/${projectId}` : "/dashboard"}>{projectId ? "Project" : "Dashboard"}</Link>
+          <Link className="secondary" href={projectId ? `/projects/${projectId}/workbook` : "/projects"}>Workbook</Link>
+          {projectId ? <Link className="secondary" href="/dashboard">Dashboard</Link> : null}
         </div>
-      </div>
-      <div className="applySavedProfile">
-        <label className="field">
-          <span>Apply saved profile to this worksheet</span>
-          <select value={profileToApply} onChange={(event) => setProfileToApply(event.target.value)} disabled={profiles.length === 0 || confirmationOpen || isBusy}>
-            {profiles.length === 0 ? <option value="">No saved profiles available</option> : null}
-            {profiles.map((profile) => <option value={profile.id} key={profile.id}>{profile.name} · {profile.outputFormat} · {profile.outputColumnCount} columns</option>)}
-          </select>
-        </label>
-        {selectedReusableProfile ? (
-          <div className="applySavedProfileDetails">
-            <span>Originally created from {selectedReusableProfile.originWorkbookFileName} · {selectedReusableProfile.originWorksheetName}</span>
-            <strong>{selectedReusableProfile.outputFormat} · {selectedReusableProfile.outputColumnCount} output columns</strong>
-          </div>
-        ) : null}
-        {applyProfileUrl ? <Link className="primary" href={applyProfileUrl}>Apply saved profile</Link> : <button className="primary" type="button" disabled>Apply saved profile</button>}
       </div>
       {pendingIntent ? (
         <div className="discardConfirmation" role="alert">

@@ -36,12 +36,13 @@ describe("source workbook re-upload replacement", () => {
 
     const existing = {
       id: "source-existing",
+      projectId: "project-1",
       originalFileName: "old.xlsx",
       fileReference: { id: "file-old", storageKey: oldStorageKey },
       worksheets: [{ id: "worksheet-existing", name: "Products", headers: ["SKU", "Description", "Price"] }]
     };
     const findFirst = vi.fn()
-      .mockResolvedValueOnce({ id: existing.id })
+      .mockResolvedValueOnce({ id: existing.id, projectId: existing.projectId })
       .mockResolvedValueOnce(existing);
     const clearOverrides = vi.fn(async () => { events.push("clear-overrides"); return { count: 2 }; });
     const updateWorksheet = vi.fn(async () => { events.push("update-worksheet"); return {}; });
@@ -49,6 +50,7 @@ describe("source workbook re-upload replacement", () => {
       fileReference: { create: vi.fn(async () => ({ id: "file-new" })) },
       sourceWorksheet: { update: updateWorksheet, create: vi.fn(async () => ({})) },
       validationIssueOverride: { deleteMany: clearOverrides },
+      project: { update: vi.fn(async () => ({ id: "project-1" })) },
       sourceWorkbookImport: { update: vi.fn(async () => {
         events.push("switch-source-reference");
         expect(await storage.head(oldStorageKey)).not.toBeNull();
@@ -58,6 +60,7 @@ describe("source workbook re-upload replacement", () => {
     const transaction = vi.fn(async (callback: (client: typeof transactionClient) => Promise<unknown>) => callback(transactionClient));
     const deleteOldReference = vi.fn(async () => { events.push("delete-old-reference"); return { count: 1 }; });
     const db = {
+      project: { findFirst: vi.fn(async () => ({ id: "project-1", sourceWorkbookImports: [{ id: existing.id }] })) },
       sourceWorkbookImport: { findFirst },
       $transaction: transaction,
       fileReference: { deleteMany: deleteOldReference }
@@ -67,6 +70,7 @@ describe("source workbook re-upload replacement", () => {
       fileName: "replacement.xlsx",
       fileSizeBytes: bytes.byteLength,
       contentType: sourceWorkbookContentTypes.xlsx,
+      projectId: "project-1",
       replaceSourceWorkbookImportId: existing.id
     }, { storage, secret, now, uploadId: newUploadId });
     await storage.uploadDirect({ uploadUrl: authorisation.uploadUrl, bytes, contentType: sourceWorkbookContentTypes.xlsx, now });
@@ -89,23 +93,61 @@ describe("source workbook re-upload replacement", () => {
     await seed(storage, oldStorageKey, oldBytes);
     const existing = {
       id: "source-existing",
+      projectId: "project-1",
       originalFileName: "old.xlsx",
       fileReference: { id: "file-old", storageKey: oldStorageKey },
       worksheets: [{ id: "worksheet-existing", name: "Products", headers: ["SKU", "Description", "Price"] }]
     };
-    const findFirst = vi.fn().mockResolvedValueOnce({ id: existing.id }).mockResolvedValueOnce(existing);
+    const findFirst = vi.fn().mockResolvedValueOnce({ id: existing.id, projectId: existing.projectId }).mockResolvedValueOnce(existing);
     const transaction = vi.fn();
-    const db = { sourceWorkbookImport: { findFirst }, $transaction: transaction } as unknown as PrismaClient;
+    const db = { project: { findFirst: vi.fn(async () => ({ id: "project-1", sourceWorkbookImports: [{ id: existing.id }] })) }, sourceWorkbookImport: { findFirst }, $transaction: transaction } as unknown as PrismaClient;
     const authorisation = await authoriseSourceWorkbookUpload(db, actor, {
       fileName: "replacement.xlsx",
       fileSizeBytes: replacementBytes.byteLength,
       contentType: sourceWorkbookContentTypes.xlsx,
+      projectId: "project-1",
       replaceSourceWorkbookImportId: existing.id
     }, { storage, secret, now, uploadId: newUploadId });
     await storage.uploadDirect({ uploadUrl: authorisation.uploadUrl, bytes: replacementBytes, contentType: sourceWorkbookContentTypes.xlsx, now });
 
     await expect(finaliseSourceWorkbookUpload(db, actor, { uploadIntent: authorisation.uploadIntent }, { storage, secret, now }))
       .rejects.toThrow("retain the existing headings");
+    expect(transaction).not.toHaveBeenCalled();
+    expect(await storage.head(oldStorageKey)).not.toBeNull();
+    expect(await storage.head(sourceWorkbookStorageKey(actor.tenantId, newUploadId, "xlsx"))).toBeNull();
+  });
+
+  it("rejects finalisation when the existing source Project no longer matches the signed replacement intent", async () => {
+    const storage = createInMemorySourceWorkbookStorage();
+    const bytes = await workbookBytes();
+    const oldStorageKey = sourceWorkbookStorageKey(actor.tenantId, "source-existing", "xlsx");
+    await seed(storage, oldStorageKey, bytes);
+    const findFirst = vi.fn()
+      .mockResolvedValueOnce({ id: "source-existing", projectId: "project-1" })
+      .mockResolvedValueOnce({
+        id: "source-existing",
+        projectId: "project-2",
+        originalFileName: "old.xlsx",
+        fileReference: { id: "file-old", storageKey: oldStorageKey },
+        worksheets: [{ id: "worksheet-existing", name: "Products", headers: ["SKU", "Description", "Price"] }]
+      });
+    const transaction = vi.fn();
+    const db = {
+      project: { findFirst: vi.fn(async () => ({ id: "project-1", sourceWorkbookImports: [{ id: "source-existing" }] })) },
+      sourceWorkbookImport: { findFirst },
+      $transaction: transaction
+    } as unknown as PrismaClient;
+    const authorisation = await authoriseSourceWorkbookUpload(db, actor, {
+      fileName: "replacement.xlsx",
+      fileSizeBytes: bytes.byteLength,
+      contentType: sourceWorkbookContentTypes.xlsx,
+      projectId: "project-1",
+      replaceSourceWorkbookImportId: "source-existing"
+    }, { storage, secret, now, uploadId: newUploadId });
+    await storage.uploadDirect({ uploadUrl: authorisation.uploadUrl, bytes, contentType: sourceWorkbookContentTypes.xlsx, now });
+
+    await expect(finaliseSourceWorkbookUpload(db, actor, { uploadIntent: authorisation.uploadIntent }, { storage, secret, now }))
+      .rejects.toThrow("must remain in its existing Project");
     expect(transaction).not.toHaveBeenCalled();
     expect(await storage.head(oldStorageKey)).not.toBeNull();
     expect(await storage.head(sourceWorkbookStorageKey(actor.tenantId, newUploadId, "xlsx"))).toBeNull();

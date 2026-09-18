@@ -113,6 +113,19 @@ export async function finaliseSourceWorkbookUpload(
     now: options.now
   });
   const storage = options.storage ?? getSourceWorkbookStorage();
+  const project = await db.project.findFirst({
+    where: { id: intent.projectId, tenantId: actor.tenantId },
+    select: { id: true, sourceWorkbookImports: { orderBy: { updatedAt: "desc" }, take: 1, select: { id: true } } }
+  });
+  if (!project) {
+    await safelyDeleteUploadedObject(storage, intent.storageKey);
+    throw new SourceWorkbookImportError("The Project is no longer available.");
+  }
+  const currentProjectSource = project.sourceWorkbookImports[0];
+  if (!intent.replaceSourceWorkbookImportId && currentProjectSource && currentProjectSource.id !== intent.uploadId) {
+    await safelyDeleteUploadedObject(storage, intent.storageKey);
+    throw new SourceWorkbookImportError("This Project already has a workbook. Use Replace workbook to upload a corrected version.");
+  }
   const metadata = await storage.head(intent.storageKey);
   try {
     verifyStoredObject(metadata, intent);
@@ -126,6 +139,7 @@ export async function finaliseSourceWorkbookUpload(
     where: { id: targetSourceWorkbookImportId, tenantId: actor.tenantId },
     select: {
       id: true,
+      projectId: true,
       originalFileName: true,
       fileReference: { select: { id: true, storageKey: true } },
       worksheets: { orderBy: { position: "asc" }, select: { id: true, name: true, headers: true } }
@@ -140,6 +154,10 @@ export async function finaliseSourceWorkbookUpload(
   if (intent.replaceSourceWorkbookImportId && !existing) {
     await safelyDeleteUploadedObject(storage, intent.storageKey);
     throw new SourceWorkbookImportError("The source workbook to re-upload is no longer available.");
+  }
+  if (existing && existing.projectId !== intent.projectId) {
+    await safelyDeleteUploadedObject(storage, intent.storageKey);
+    throw new SourceWorkbookImportError("The replacement workbook must remain in its existing Project.");
   }
 
   const bytes = await storage.get(intent.storageKey, { useCache: false });
@@ -184,6 +202,7 @@ export async function finaliseSourceWorkbookUpload(
         data: {
           id: intent.uploadId,
           tenantId: actor.tenantId,
+          projectId: intent.projectId,
           fileReferenceId: fileReference.id,
           originalFileName: intent.originalFileName,
           fileSizeBytes: intent.fileSizeBytes,
@@ -205,6 +224,7 @@ export async function finaliseSourceWorkbookUpload(
           }))
         });
       }
+      await transaction.project.update({ where: { id: intent.projectId }, data: { updatedById: actor.id } });
       return sourceImport;
     });
   }
@@ -232,7 +252,7 @@ export async function finaliseSourceWorkbookUpload(
         }))
       });
     }
-    return transaction.sourceWorkbookImport.update({
+    const sourceImport = await transaction.sourceWorkbookImport.update({
       where: { id: existing.id },
       data: {
         fileReferenceId: fileReference.id,
@@ -244,6 +264,8 @@ export async function finaliseSourceWorkbookUpload(
       },
       include: { worksheets: { orderBy: { position: "asc" } } }
     });
+    await transaction.project.update({ where: { id: intent.projectId }, data: { updatedById: actor.id } });
+    return sourceImport;
   });
 
   if (oldFileReference && oldFileReference.storageKey !== intent.storageKey) {

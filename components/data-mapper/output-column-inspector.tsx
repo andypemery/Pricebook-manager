@@ -35,7 +35,7 @@ export function OutputColumnInspector({ column, canEdit, onChange }: {
         <p className="sheetLabel">Selected column</p>
         <h3 id="column-settings-title">Column Settings</h3>
       </div>
-      <div className="outputColumnFields">
+      <div className={`outputColumnFields ${isStatic ? "static" : "source"}`}>
         <label className="field">
           <span>Output heading</span>
           <input value={column.outputHeading} maxLength={200} disabled={!canEdit} onChange={(event) => onChange({ outputHeading: event.target.value })} />

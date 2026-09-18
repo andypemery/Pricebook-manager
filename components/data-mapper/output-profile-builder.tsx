@@ -62,13 +62,15 @@ export function outputHeadingInsertionClassName(
   return classes.join(" ");
 }
 
-export function OutputProfileBuilder({ source, initialDraft, profiles, initialApplication, initialEffectiveDate, canEdit }: {
+export function OutputProfileBuilder({ source, initialDraft, profiles, initialApplication, initialEffectiveDate, canEdit, projectId, projectName }: {
   source: SourceWorksheetPreview;
   initialDraft: OutputProfileDraft;
   profiles: OutputProfileSummary[];
   initialApplication?: AppliedOutputProfileContext | null;
   initialEffectiveDate: string;
   canEdit: boolean;
+  projectId?: string;
+  projectName?: string;
 }) {
   const router = useRouter();
   const [draft, setDraft] = useState(initialDraft);
@@ -192,7 +194,7 @@ export function OutputProfileBuilder({ source, initialDraft, profiles, initialAp
     const submittedFingerprint = outputProfileDraftFingerprint(submittedDraft);
     resetSaveState();
     startSaving(async () => {
-      const result = await saveOutputProfileAction(saveInputFromOutputProfileDraft(submittedDraft));
+      const result = await saveOutputProfileAction({ ...saveInputFromOutputProfileDraft(submittedDraft), projectId });
       if (!result.ok) {
         setError(result.error);
         return;
@@ -201,7 +203,7 @@ export function OutputProfileBuilder({ source, initialDraft, profiles, initialAp
       setDraft((current) => ({ ...current, id: result.profileId }));
       setApplication(null);
       setMessage(result.message);
-      router.replace(`/mapping?profile=${encodeURIComponent(result.profileId)}`);
+      router.replace(projectId ? `/mapping?project=${encodeURIComponent(projectId)}&apply=${encodeURIComponent(result.profileId)}&source=${encodeURIComponent(source.sourceWorkbookImportId)}&worksheet=${encodeURIComponent(source.id)}` : `/mapping?profile=${encodeURIComponent(result.profileId)}`);
       router.refresh();
     });
   }
@@ -222,6 +224,7 @@ export function OutputProfileBuilder({ source, initialDraft, profiles, initialAp
 
   return (
     <section className="outputProfileBuilder" aria-label="Output Profile Builder">
+      {projectId ? <p className="builderProjectContext">Project: <strong>{projectName}</strong></p> : null}
       <OutputProfileManager
         profiles={profiles}
         activeProfileId={draft.id}
@@ -233,6 +236,8 @@ export function OutputProfileBuilder({ source, initialDraft, profiles, initialAp
         currentProfileName={draft.name}
         isDirty={isDirty}
         canEdit={canEdit}
+        projectId={projectId}
+        projectName={projectName}
         isBusy={isSaving}
         saveMessage={message}
         saveError={error}
@@ -477,7 +482,7 @@ export function OutputProfileBuilder({ source, initialDraft, profiles, initialAp
 
       <section className="outputWorkflowStage" id="generate" aria-labelledby="generate-stage-title">
         <div className="workflowStageHeader"><span>4</span><div><h2 id="generate-stage-title">Generate</h2><p className="muted">Review readiness and download the finished output.</p></div></div>
-        <OutputGenerationPanel sourceWorkbookImportId={source.sourceWorkbookImportId} sourceFilename={source.workbookFileName} draft={draft} worksheets={source.workbookWorksheets ?? [{ id: source.id, name: source.worksheetName, position: 0, headers: source.headers }]} filenameDate={filenameDate} canEdit={canEdit && !isSaving} />
+        <OutputGenerationPanel projectId={source.projectId} sourceWorkbookImportId={source.sourceWorkbookImportId} sourceFilename={source.workbookFileName} draft={draft} worksheets={source.workbookWorksheets ?? [{ id: source.id, name: source.worksheetName, position: 0, headers: source.headers }]} filenameDate={filenameDate} canEdit={canEdit && !isSaving} />
       </section>
     </section>
   );

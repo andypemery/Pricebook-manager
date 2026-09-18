@@ -13,8 +13,11 @@ const secret = "test-source-upload-secret-that-is-long-enough";
 const now = Date.parse("2026-09-16T12:00:00Z");
 const contentType = sourceWorkbookContentTypes.xlsx;
 
-function database(source: { id: string } | null = null) {
-  return { sourceWorkbookImport: { findFirst: vi.fn(async () => source) } } as unknown as PrismaClient;
+function database(source: { id: string; projectId: string } | null = null, project: { id: string; sourceWorkbookImports: Array<{ id: string }> } | null = { id: "project-a", sourceWorkbookImports: [] }) {
+  return {
+    project: { findFirst: vi.fn(async () => project) },
+    sourceWorkbookImport: { findFirst: vi.fn(async () => source) }
+  } as unknown as PrismaClient;
 }
 
 async function authorise(overrides: Record<string, unknown> = {}, db = database()) {
@@ -23,6 +26,7 @@ async function authorise(overrides: Record<string, unknown> = {}, db = database(
     fileName: "pricebook.xlsx",
     fileSizeBytes: 5 * 1024 * 1024,
     contentType,
+    projectId: "project-a",
     ...overrides
   }, { storage, secret, now, uploadId: "11111111-1111-4111-8111-111111111111" });
   return { result, storage };
@@ -41,6 +45,7 @@ describe("source workbook upload authorisation", () => {
     const payload = validateSourceWorkbookUploadIntent({ uploadIntent: result.uploadIntent, actor, secret, now });
 
     expect(payload.storageKey).toBe("source-workbooks/tenant-a/11111111-1111-4111-8111-111111111111/original.xlsx");
+    expect(payload.projectId).toBe("project-a");
     expect(payload.storageKey).not.toContain("client/override.exe");
     expect(result.contentType).toBe(contentType);
     expect(result.expiresAt - now).toBe(10 * 60 * 1000);
@@ -62,6 +67,26 @@ describe("source workbook upload authorisation", () => {
     const db = database(null);
     await expect(authorise({ replaceSourceWorkbookImportId: "tenant-b-source" }, db)).rejects.toThrow("not available for this tenant");
     expect(db.sourceWorkbookImport.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "tenant-b-source", tenantId: "tenant-a" } }));
+  });
+
+  it("requires Project identity for every new upload", async () => {
+    await expect(authorise({ projectId: undefined })).rejects.toThrow("Choose a Project");
+  });
+
+  it("rejects a new upload for a Project outside the authenticated tenant", async () => {
+    const db = database(null, null);
+    await expect(authorise({}, db)).rejects.toThrow("Project is not available");
+    expect(db.project.findFirst).toHaveBeenCalledWith({ where: { id: "project-a", tenantId: "tenant-a" }, select: { id: true, sourceWorkbookImports: { take: 1, select: { id: true } } } });
+  });
+
+  it("requires the replacement flow when a Project already has a current workbook", async () => {
+    const db = database(null, { id: "project-a", sourceWorkbookImports: [{ id: "source-existing" }] });
+    await expect(authorise({}, db)).rejects.toThrow("Use Replace workbook");
+  });
+
+  it("keeps replacement authorisation in the source workbook's server-authoritative Project", async () => {
+    const db = database({ id: "source-a", projectId: "project-existing" });
+    await expect(authorise({ replaceSourceWorkbookImportId: "source-a" }, db)).rejects.toThrow("must remain in its existing Project");
   });
 
   it("binds finalisation to the issuing user and tenant and rejects expiry or tampering", async () => {

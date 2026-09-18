@@ -18,7 +18,7 @@ function request() {
   return new Request("https://pricebook.example/api/data-mapper/source-imports/upload-authorisation", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ fileName: "pricebook.xlsx", fileSizeBytes: 1024, contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })
+    body: JSON.stringify({ fileName: "pricebook.xlsx", fileSizeBytes: 1024, contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", projectId: "project-1" })
   });
 }
 
@@ -44,6 +44,6 @@ describe("source workbook upload authorisation route security", () => {
     mocks.authoriseSourceWorkbookUpload.mockResolvedValueOnce({ uploadIntent: "intent", uploadUrl: "signed-url", contentType: "type", expiresAt: 1 });
     const response = await POST(request());
     expect(response.status).toBe(201);
-    expect(mocks.authoriseSourceWorkbookUpload).toHaveBeenCalledWith({}, actor, expect.objectContaining({ fileName: "pricebook.xlsx", fileSizeBytes: 1024 }));
+    expect(mocks.authoriseSourceWorkbookUpload).toHaveBeenCalledWith({}, actor, expect.objectContaining({ fileName: "pricebook.xlsx", fileSizeBytes: 1024, projectId: "project-1" }));
   });
 });

@@ -11,6 +11,7 @@ type UploadAuthorisationResponse = {
 export type SourceWorkbookRegistrationResponse = {
   sourceWorkbookImportId: string;
   sourceWorksheetId: string;
+  projectId: string;
   mappingUrl: string;
 };
 
@@ -59,6 +60,7 @@ export function putSourceWorkbookDirectly({ uploadUrl, file, contentType, onProg
 export async function uploadSourceWorkbookDirectly(
   file: File,
   options: {
+    projectId: string;
     worksheetName?: string | null;
     ignoredValidationFingerprints?: string[];
     replaceSourceWorkbookImportId?: string;
@@ -66,7 +68,7 @@ export async function uploadSourceWorkbookDirectly(
     signal?: AbortSignal;
     directPut?: DirectPut;
     request?: typeof fetch;
-  } = {}
+  }
 ): Promise<SourceWorkbookRegistrationResponse> {
   const descriptor = validateSourceWorkbookDescriptor({ fileName: file.name, fileSizeBytes: file.size, contentType: file.type });
   const request = options.request ?? fetch;
@@ -77,6 +79,7 @@ export async function uploadSourceWorkbookDirectly(
       fileName: descriptor.originalFileName,
       fileSizeBytes: descriptor.fileSizeBytes,
       contentType: file.type,
+      projectId: options.projectId,
       replaceSourceWorkbookImportId: options.replaceSourceWorkbookImportId
     }),
     signal: options.signal
@@ -106,7 +109,7 @@ export async function uploadSourceWorkbookDirectly(
     signal: options.signal
   });
   const registration = await registrationResponse.json() as Partial<SourceWorkbookRegistrationResponse> & { error?: string };
-  if (!registrationResponse.ok || !registration.mappingUrl || !registration.sourceWorkbookImportId || !registration.sourceWorksheetId) {
+  if (!registrationResponse.ok || !registration.mappingUrl || !registration.sourceWorkbookImportId || !registration.sourceWorksheetId || registration.projectId !== options.projectId) {
     if (directUploadError) throw directUploadError;
     throw new Error(registration.error || "The uploaded workbook could not be registered.");
   }

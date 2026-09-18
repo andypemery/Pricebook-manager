@@ -6,7 +6,7 @@ import {
   Columns3,
   DatabaseBackup,
   FileQuestion,
-  FileSpreadsheet,
+  FolderKanban,
   FileText,
   Gauge,
   Image,
@@ -43,7 +43,7 @@ export type SettingsNavigationGroup = {
 
 export const navigationItems: NavigationItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, scope: "all" },
-  { href: "/workbook", label: "Workbook", icon: FileSpreadsheet, scope: "all" },
+  { href: "/projects", label: "Projects", icon: FolderKanban, scope: "all" },
   { href: "/mapping", label: "Output Profiles", icon: Columns3, scope: "all" },
   { href: "/settings", label: "Settings", icon: Settings, scope: "all" }
 ];

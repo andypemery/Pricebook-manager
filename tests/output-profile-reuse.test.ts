@@ -32,6 +32,7 @@ function reusableProfile(): OutputProfileDraft {
 function source(headers: string[], sampleRows: string[][] = []): SourceWorksheetPreview {
   return {
     id: "worksheet-new",
+    projectId: "project-new",
     sourceWorkbookImportId: "source-new",
     workbookFileName: "September Supplier Pricebook.xlsx",
     worksheetName: "Canon Print",

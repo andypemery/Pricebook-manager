@@ -18,10 +18,11 @@ const uploadUrlLifetimeMilliseconds = 10 * 60 * 1000;
 const uploadIntentLifetimeMilliseconds = 60 * 60 * 1000;
 
 type UploadIntentPayload = {
-  version: 1;
+  version: 2;
   uploadId: string;
   tenantId: string;
   userId: string;
+  projectId: string;
   replaceSourceWorkbookImportId: string | null;
   originalFileName: string;
   fileSizeBytes: number;
@@ -88,7 +89,7 @@ export function validateSourceWorkbookUploadIntent(input: {
 }) {
   const payload = parseUploadIntentValue(input.uploadIntent, input.secret);
   const now = input.now ?? Date.now();
-  if (payload.version !== 1 || !payload.uploadId || payload.expiresAt <= now) {
+  if (payload.version !== 2 || !payload.uploadId || !payload.projectId || payload.projectId.length > 100 || payload.expiresAt <= now) {
     throw new SourceWorkbookUploadError("The upload authorisation has expired. Please upload the workbook again.");
   }
   if (payload.tenantId !== input.actor.tenantId || payload.userId !== input.actor.id) {
@@ -119,7 +120,7 @@ export function validateSourceWorkbookUploadIntent(input: {
 export async function authoriseSourceWorkbookUpload(
   db: PrismaClient,
   actor: { id: string; tenantId: string },
-  input: { fileName: unknown; fileSizeBytes: unknown; contentType: unknown; replaceSourceWorkbookImportId?: unknown },
+  input: { fileName: unknown; fileSizeBytes: unknown; contentType: unknown; projectId: unknown; replaceSourceWorkbookImportId?: unknown },
   options: { storage?: SourceWorkbookStorage; secret?: string; now?: number; uploadId?: string } = {}
 ): Promise<SourceWorkbookUploadAuthorisation> {
   let descriptor;
@@ -133,12 +134,24 @@ export async function authoriseSourceWorkbookUpload(
   const replaceSourceWorkbookImportId = input.replaceSourceWorkbookImportId === undefined || input.replaceSourceWorkbookImportId === null || input.replaceSourceWorkbookImportId === ""
     ? null
     : String(input.replaceSourceWorkbookImportId);
+  const suppliedProjectId = typeof input.projectId === "string" ? input.projectId.trim() : "";
+  if (!suppliedProjectId || suppliedProjectId.length > 100) throw new SourceWorkbookUploadError("Choose a Project before uploading a workbook.");
+  let projectId = suppliedProjectId;
   if (replaceSourceWorkbookImportId) {
     const existingSource = await db.sourceWorkbookImport.findFirst({
       where: { id: replaceSourceWorkbookImportId, tenantId: actor.tenantId },
-      select: { id: true }
+      select: { id: true, projectId: true }
     });
     if (!existingSource) throw new SourceWorkbookUploadError("The source workbook to re-upload is not available for this tenant.");
+    if (existingSource.projectId !== suppliedProjectId) throw new SourceWorkbookUploadError("The replacement workbook must remain in its existing Project.");
+    projectId = existingSource.projectId;
+  } else {
+    const project = await db.project.findFirst({
+      where: { id: projectId, tenantId: actor.tenantId },
+      select: { id: true, sourceWorkbookImports: { take: 1, select: { id: true } } }
+    });
+    if (!project) throw new SourceWorkbookUploadError("The Project is not available.");
+    if (project.sourceWorkbookImports.length > 0) throw new SourceWorkbookUploadError("This Project already has a workbook. Use Replace workbook to upload a corrected version.");
   }
 
   const now = options.now ?? Date.now();
@@ -154,10 +167,11 @@ export async function authoriseSourceWorkbookUpload(
     validUntil: uploadExpiresAt
   });
   const uploadIntent = encodeUploadIntent({
-    version: 1,
+    version: 2,
     uploadId,
     tenantId: actor.tenantId,
     userId: actor.id,
+    projectId,
     replaceSourceWorkbookImportId,
     originalFileName: descriptor.originalFileName,
     fileSizeBytes: descriptor.fileSizeBytes,

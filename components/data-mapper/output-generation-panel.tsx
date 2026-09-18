@@ -17,7 +17,7 @@ function worksheetModeLabel(mode: OutputProfileDraft["worksheetMode"]) {
   return "Combined output";
 }
 
-export function OutputGenerationPanel({ sourceWorkbookImportId, sourceFilename, draft, worksheets = [], filenameDate, canEdit }: { sourceWorkbookImportId: string; sourceFilename: string; draft: OutputProfileDraft; worksheets?: SourceWorkbookWorksheet[]; filenameDate: string; canEdit: boolean }) {
+export function OutputGenerationPanel({ projectId, sourceWorkbookImportId, sourceFilename, draft, worksheets = [], filenameDate, canEdit }: { projectId: string; sourceWorkbookImportId: string; sourceFilename: string; draft: OutputProfileDraft; worksheets?: SourceWorkbookWorksheet[]; filenameDate: string; canEdit: boolean }) {
   const reuploadInputRef = useRef<HTMLInputElement>(null);
   const [state, setState] = useState<ValidationState | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
@@ -62,7 +62,7 @@ export function OutputGenerationPanel({ sourceWorkbookImportId, sourceFilename, 
     if (!canEdit || pending) return;
     setPending(true); setError(null); setMessage(null); setUploadProgress(0);
     try {
-      await uploadSourceWorkbookDirectly(file, { replaceSourceWorkbookImportId: sourceWorkbookImportId, onProgress: setUploadProgress });
+      await uploadSourceWorkbookDirectly(file, { projectId, replaceSourceWorkbookImportId: sourceWorkbookImportId, onProgress: setUploadProgress });
       setMessage("Source workbook re-uploaded and validation refreshed. Previous validation ignores were cleared.");
       await load();
     } catch (uploadError) {

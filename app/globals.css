@@ -1162,6 +1162,8 @@ p { line-height: 1.6; }
 .columnInspectorHeader { padding-bottom: 14px; border-bottom: 1px solid var(--border-soft); margin-bottom: 16px; }
 .columnInspectorHeader h3, .columnInspectorHeader p { margin: 0; }
 .outputColumnFields { display: grid; grid-template-columns: minmax(0, 1fr); align-items: end; gap: 14px; }
+.outputColumnFields.source { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.outputColumnFields.static { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .outputColumnInspector .field, .outputColumnFields .field { margin: 0; }
 .sourceHeadingField > span { white-space: nowrap; }
 .sourceHeadingField input[readonly] { min-height: 43px; background: var(--surface-panel); color: var(--text-muted); cursor: default; }
@@ -1369,8 +1371,20 @@ p { line-height: 1.6; }
 .buildOutputStage > .spreadsheetCard .sheetHeader { padding: 14px 16px; }
 .buildOutputStage .sourceBuilderSheet th { height: 58px; }
 .buildOutputStage .builderSheet td { height: 38px; padding-block: 7px; }
-.outputColumnsWorkspace { display: grid; grid-template-columns: minmax(0, 3fr) minmax(270px, 1fr); gap: 16px; align-items: stretch; }
+.outputColumnsWorkspace { display: block; }
 .outputColumnsWorkspace > .spreadsheetCard { margin: 0; }
+.outputColumnsWorkspace > .outputColumnInspector { margin-top: 12px; }
+
+.projectGrid, .projectProfileGrid { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:14px; }
+.projectCard, .projectProfileCard { display:grid; gap:10px; align-content:start; }
+.projectCard h2 { margin:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.projectCardMeta, .projectProfileCard span { margin:0; color:var(--text-muted); font-size:.9rem; }
+.projectRename { display:flex; gap:10px; align-items:end; margin-top:14px; }
+.projectRename .field { flex:1; margin:0; }
+.projectProfileAttach { display:flex; gap:10px; align-items:end; margin-bottom:16px; }
+.projectProfileAttach .field { flex:1; margin:0; }
+.builderProjectContext { margin:0 0 10px; color:var(--text-muted); }
+@media (max-width:640px) { .projectRename, .projectProfileAttach { display:grid; } }
 .rulesOutputGrid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
 .rulesOutputGrid > .card { min-width: 0; margin: 0; }
 .generationReadinessHeader { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
@@ -1451,6 +1465,7 @@ p { line-height: 1.6; }
   .outputProfileIdentity, .sheetHeader { align-items: stretch; flex-direction: column; }
   .outputProfileSaveArea { justify-content: flex-start; }
   .filterRule, .profileManagerControls, .applySavedProfile, .outputProfileContext, .outputSettingsGrid, .outputSettingsTwoColumn, .formatSettings, .outputColumnFields, .workspaceHeaderTop, .workspaceContext { grid-template-columns: 1fr; }
+  .outputColumnFields.source, .outputColumnFields.static { grid-template-columns: 1fr; }
   .filenameTemplateField { grid-column: auto; }
   .outputProfileContextActions { justify-content: flex-start; }
   .profileManagerActions { justify-content: flex-start; }

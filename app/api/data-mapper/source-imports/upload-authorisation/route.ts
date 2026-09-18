@@ -21,12 +21,14 @@ export async function POST(request: Request) {
       fileName?: unknown;
       fileSizeBytes?: unknown;
       contentType?: unknown;
+      projectId?: unknown;
       replaceSourceWorkbookImportId?: unknown;
     };
     const authorisation = await authoriseSourceWorkbookUpload(prisma, actor, {
       fileName: body.fileName,
       fileSizeBytes: body.fileSizeBytes,
       contentType: body.contentType,
+      projectId: body.projectId,
       replaceSourceWorkbookImportId: body.replaceSourceWorkbookImportId
     });
     return NextResponse.json(authorisation, { status: 201 });

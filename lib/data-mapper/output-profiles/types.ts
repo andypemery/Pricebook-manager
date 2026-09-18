@@ -40,6 +40,7 @@ export type OutputProfileCsvDelimiter = (typeof csvDelimiters)[number];
 
 export type SourceWorksheetPreview = {
   id: string;
+  projectId: string;
   sourceWorkbookImportId: string;
   workbookFileName: string;
   worksheetName: string;
@@ -95,6 +96,7 @@ export type OutputProfileDraft = {
 };
 
 export type SaveOutputProfileInput = {
+  projectId?: string;
   id?: string | null;
   name: string;
   filenameTemplate: string;
@@ -131,6 +133,7 @@ export type OutputProfileSummary = {
   sourceWorksheetId: string;
   outputFormat: OutputProfileFormat;
   outputColumnCount: number;
+  updatedAt: string;
   originWorkbookFileName: string;
   originWorksheetName: string;
 };
