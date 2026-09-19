@@ -147,15 +147,17 @@ describe("Project navigation and workspace structure", () => {
     expect(projects).not.toContain("fileReference");
   });
 
-  it("covers Project list, empty/current-workbook detail and association-only controls", () => {
+  it("covers Project list, empty/current-workbook detail and the simplified resume hub", () => {
     const projectList = source("app/(app)/projects/page.tsx");
     const projectDetail = source("app/(app)/projects/[projectId]/page.tsx");
     expect(projectList).toContain("Workbook not uploaded");
     expect(projectList).toContain("associated Output Profiles");
     expect(projectDetail).toContain("Upload a workbook to start this Project.");
-    expect(projectDetail).toContain("Open workbook");
-    expect(projectDetail).toContain("Add existing Output Profile");
-    expect(projectDetail).toContain("Remove from Project");
+    expect(projectDetail).toContain("Review workbook");
+    expect(projectDetail).toContain("Replace workbook");
+    expect(projectDetail).toContain("Build output");
+    expect(projectDetail).not.toContain("Add existing Output Profile");
+    expect(projectDetail).not.toContain("Remove from Project");
     expect(projectDetail).not.toContain("outputProfile.delete");
   });
 

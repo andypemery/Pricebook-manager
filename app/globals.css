@@ -1385,6 +1385,7 @@ p { line-height: 1.6; }
 .projectRename .field { flex:1; margin:0; }
 .projectProfileAttach { display:flex; gap:10px; align-items:end; margin-bottom:16px; }
 .projectProfileAttach .field { flex:1; margin:0; }
+.projectProfileChips { display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; }
 .builderProjectContext { margin:0 0 10px; color:var(--text-muted); }
 @media (max-width:640px) { .projectRename, .projectProfileAttach { display:grid; } }
 .rulesOutputGrid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }

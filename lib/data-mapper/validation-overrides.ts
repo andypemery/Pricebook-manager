@@ -23,6 +23,8 @@ export async function loadSourceValidationState(db: PrismaClient, tenantId: stri
       id: true,
       projectId: true,
       originalFileName: true,
+      fileSizeBytes: true,
+      validatedAt: true,
       fileReference: { select: { storageKey: true, fileType: true } },
       worksheets: { orderBy: { position: "asc" }, select: { id: true, name: true, columnCount: true } }
     }
@@ -215,5 +217,5 @@ export async function changeSourceRowExclusions(
       where: { tenantId: actor.tenantId, sourceWorkbookImportId, OR: keys }
     });
   }
-  return { changedCount: requested.length, worksheetNames: [...new Set(requested.map((row) => row.worksheetName))] };
+  return { changedCount: requested.length, worksheetNames: [...new Set(requested.map((row) => row.worksheetName))], projectId: state.source.projectId };
 }

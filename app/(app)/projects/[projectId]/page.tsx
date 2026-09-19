@@ -1,16 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import {
-  attachOutputProfileToProjectAction,
-  removeOutputProfileFromProjectAction,
-  renameProjectAction
-} from "@/lib/actions/project.actions";
+import { renameProjectAction } from "@/lib/actions/project.actions";
 import { requireUser } from "@/lib/auth";
 import { hasPermission } from "@/lib/permissions";
 import {
   friendlyWorkbookName,
-  getProjectDetail,
-  listAvailableOutputProfilesForProject
+  getProjectDetail
 } from "@/lib/data-mapper/projects/repository";
 import { prisma } from "@/lib/prisma";
 
@@ -20,10 +15,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   const { projectId } = await params;
   const actor = await requireUser();
   if (!hasPermission(actor, "viewRecords")) notFound();
-  const [project, availableProfiles] = await Promise.all([
-    getProjectDetail(prisma, actor.tenantId, projectId),
-    listAvailableOutputProfilesForProject(prisma, actor.tenantId, projectId)
-  ]);
+  const project = await getProjectDetail(prisma, actor.tenantId, projectId);
   if (!project) notFound();
 
   const workbook = project.sourceWorkbookImports[0];
@@ -35,20 +27,8 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
     await renameProjectAction(projectId, formData);
   }
 
-  async function attachProfileForm(formData: FormData) {
-    "use server";
-    const outputProfileId = formData.get("outputProfileId");
-    if (typeof outputProfileId === "string") await attachOutputProfileToProjectAction(projectId, outputProfileId);
-  }
-
-  async function removeProfileForm(formData: FormData) {
-    "use server";
-    const outputProfileId = formData.get("outputProfileId");
-    if (typeof outputProfileId === "string") await removeOutputProfileFromProjectAction(projectId, outputProfileId);
-  }
-
   const builderQuery = workbook && referenceWorksheet
-    ? `project=${encodeURIComponent(project.id)}&source=${encodeURIComponent(workbook.id)}&worksheet=${encodeURIComponent(referenceWorksheet.id)}`
+    ? `project=${encodeURIComponent(project.id)}&source=${encodeURIComponent(workbook.id)}&worksheet=${encodeURIComponent(referenceWorksheet.id)}${project.outputProfiles[0] ? `&apply=${encodeURIComponent(project.outputProfiles[0].outputProfile.id)}` : ""}`
     : null;
 
   return <>
@@ -57,7 +37,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         <div>
           <p className="breadcrumb"><Link href="/projects">Projects</Link> · Project</p>
           <h1 title={project.name}>{project.name}</h1>
-          <p>Keep the workbook and reusable Output Profiles for this work together.</p>
+          <p>Resume workbook review and build output from one place.</p>
         </div>
         <div className="actions"><Link className="secondary" href="/dashboard">Dashboard</Link><Link className="secondary" href="/projects">Projects</Link></div>
       </div>
@@ -71,29 +51,22 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
           <h2>{workbook ? friendlyWorkbookName(workbook.originalFileName) : "Workbook not uploaded"}</h2>
           <p className="muted">{workbook ? `${workbook._count.worksheets} worksheets · ${workbook.validationStatus === "VALIDATED" ? "Ready" : "Needs review"} · Prepared ${workbook.validatedAt.toLocaleDateString("en-GB")}` : "Upload a workbook to start this Project."}</p>
         </div>
-        {workbook ? <div className="actions"><Link className="primary" href={`/projects/${project.id}/workbook?source=${encodeURIComponent(workbook.id)}`}>Open workbook</Link><Link className="secondary" href={`/projects/${project.id}/workbook?replace=${encodeURIComponent(workbook.id)}`}>Replace workbook</Link></div> : <Link className="primary" href={`/projects/${project.id}/workbook`}>Upload workbook</Link>}
+        {workbook ? <div className="actions"><Link className="primary" href={`/projects/${project.id}/workbook?source=${encodeURIComponent(workbook.id)}`}>Review workbook</Link><Link className="secondary" href={`/projects/${project.id}/workbook?replace=${encodeURIComponent(workbook.id)}`}>Replace workbook</Link></div> : <Link className="primary" href={`/projects/${project.id}/workbook`}>Upload workbook</Link>}
       </div>
     </section>
 
     <section className="card" id="output-profiles">
       <div className="sectionHeader">
-        <div><p className="sheetLabel">Reusable templates</p><h2>Output Profiles</h2><p className="muted">Profiles remain tenant-level masters that can be used across Projects.</p></div>
-        {builderQuery ? <Link className="secondary" href={`/mapping?${builderQuery}`}>Create New Output Profile</Link> : null}
-      </div>
-
-      {canEdit && availableProfiles.length > 0 ? <form action={attachProfileForm} className="projectProfileAttach">
-        <label className="field"><span>Add existing Output Profile</span><select name="outputProfileId" required defaultValue=""><option value="" disabled>Choose a reusable profile</option>{availableProfiles.map((profile) => <option value={profile.id} key={profile.id}>{profile.name} · {profile.outputFormat} · {profile._count.columns} columns</option>)}</select></label>
-        <button className="secondary" type="submit">Add to Project</button>
-      </form> : null}
-
-      {project.outputProfiles.length ? <div className="projectProfileGrid">{project.outputProfiles.map(({ outputProfile }) => <article className="projectProfileCard" key={outputProfile.id}>
-        <strong>{outputProfile.name}</strong>
-        <span>{outputProfile.outputFormat} · {outputProfile._count.columns} columns · Updated {outputProfile.updatedAt.toLocaleDateString("en-GB")}</span>
-        <div className="actions">
-          {builderQuery ? <Link className="secondary" href={`/mapping?${builderQuery}&apply=${encodeURIComponent(outputProfile.id)}`}>Build Output</Link> : null}
-          {canEdit ? <form action={removeProfileForm}><input type="hidden" name="outputProfileId" value={outputProfile.id} /><button className="secondary" type="submit">Remove from Project</button></form> : null}
+        <div>
+          <p className="sheetLabel">Output</p>
+          <h2>Build Output</h2>
+          <p className="muted">{project.outputProfiles.length === 0
+            ? "No reusable Output Profiles have been used with this Project yet."
+            : `${project.outputProfiles.length} reusable Output ${project.outputProfiles.length === 1 ? "Profile has" : "Profiles have"} been used with this Project.`}</p>
         </div>
-      </article>)}</div> : <div className="emptyState"><p className="muted">No Output Profiles are associated with this Project yet.</p>{!workbook ? <p className="muted">Upload a workbook before creating a new profile.</p> : null}</div>}
+        {builderQuery ? <Link className="primary" href={`/mapping?${builderQuery}`}>Build output</Link> : null}
+      </div>
+      {project.outputProfiles.length > 0 ? <div className="projectProfileChips" aria-label="Profiles used">{project.outputProfiles.map(({ outputProfile }) => <span className="badge" key={outputProfile.id}>{outputProfile.name}</span>)}</div> : !workbook ? <p className="muted">Upload a workbook before building output.</p> : null}
     </section>
   </>;
 }

@@ -1,12 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import type ExcelJS from "exceljs";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowDownUp, FileSpreadsheet, LoaderCircle, Search, Upload } from "lucide-react";
+import { updateSourceRowExclusionsAction } from "@/lib/actions/source-row-exclusion.actions";
+import { updateValidationIssueOverridesAction } from "@/lib/actions/validation-override.actions";
 import type { UploadedWorkbookDetails, ValidationIssueCategory, WorkbookSummary, WorkbookValidationResult, WorksheetPreview } from "@/lib/data-mapper/types";
 import { createWorksheetPreview, friendlyExcelImportMessage, readWorkbook } from "@/lib/data-mapper/excel-import";
+import type { PersistedWorkbookReview } from "@/lib/data-mapper/persisted-workbook-review";
 import { validateWorkbook } from "@/lib/data-mapper/validation";
 import { uploadSourceWorkbookDirectly } from "@/lib/data-mapper/source-workbook-direct-upload";
 import { SourceWorkbookPolicyError, validateSourceWorkbookDescriptor } from "@/lib/data-mapper/source-workbook-policy";
@@ -89,20 +92,42 @@ export function visibleRows(preview: WorksheetPreview | null, searchTerm: string
   });
 }
 
-export function WorkbookImporter({ canPrepareOutputProfiles, projectId, projectName, replaceSourceWorkbookImportId }: { canPrepareOutputProfiles: boolean; projectId: string; projectName: string; replaceSourceWorkbookImportId?: string }) {
+type WorkbookImporterProps = {
+  canPrepareOutputProfiles: boolean;
+  canEditReview: boolean;
+  projectId: string;
+  projectName: string;
+  replaceSourceWorkbookImportId?: string;
+  persistedReview?: PersistedWorkbookReview;
+  buildOutputUrl?: string | null;
+};
+
+export function WorkbookImporter({
+  canPrepareOutputProfiles,
+  canEditReview,
+  projectId,
+  projectName,
+  replaceSourceWorkbookImportId,
+  persistedReview,
+  buildOutputUrl
+}: WorkbookImporterProps) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [workbook, setWorkbook] = useState<ExcelJS.Workbook | null>(null);
-  const [summary, setSummary] = useState<WorkbookSummary | null>(null);
-  const [validation, setValidation] = useState<WorkbookValidationResult | null>(null);
+  const [summary, setSummary] = useState<WorkbookSummary | null>(() => persistedReview?.summary ?? null);
+  const [validation, setValidation] = useState<WorkbookValidationResult | null>(() => persistedReview?.validation ?? null);
   const [validationFilters, setValidationFilters] = useState<ValidationFilters>({ worksheet: "All worksheets", severity: "All", category: "All" });
-  const [ignoredFingerprints, setIgnoredFingerprints] = useState<Set<string>>(() => new Set());
+  const [ignoredFingerprints, setIgnoredFingerprints] = useState<Set<string>>(() => new Set(persistedReview?.ignoredFingerprints ?? []));
   const [selectedRowKeys, setSelectedRowKeys] = useState<Set<string>>(() => new Set());
-  const [excludedRows, setExcludedRows] = useState<Map<string, SourceRowReference>>(() => new Map());
+  const [excludedRows, setExcludedRows] = useState<Map<string, SourceRowReference>>(() => new Map((persistedReview?.excludedRows ?? []).map((row) => [sourceRowKey(row.worksheetName, row.physicalRowNumber), row])));
   const [deletedRowsReviewOpen, setDeletedRowsReviewOpen] = useState(false);
   const [pendingDeleteRows, setPendingDeleteRows] = useState<SourceRowReference[]>([]);
-  const [uploadDetails, setUploadDetails] = useState<UploadedWorkbookDetails | null>(null);
+  const [uploadDetails, setUploadDetails] = useState<UploadedWorkbookDetails | null>(() => persistedReview ? {
+    fileName: persistedReview.fileName,
+    fileSize: persistedReview.fileSizeBytes,
+    uploadedAt: persistedReview.preparedAt
+  } : null);
   const [selectedUploadDetails, setSelectedUploadDetails] = useState<UploadedWorkbookDetails | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [sort, setSort] = useState<SortState>(null);
@@ -112,6 +137,8 @@ export function WorkbookImporter({ canPrepareOutputProfiles, projectId, projectN
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [profileError, setProfileError] = useState<string | null>(null);
+  const [reviewActionError, setReviewActionError] = useState<string | null>(null);
+  const [isReviewUpdating, startReviewUpdate] = useTransition();
   const worksheetPreviewPan = useHorizontalPan<HTMLDivElement>();
   const selectAllRef = useRef<HTMLInputElement>(null);
 
@@ -119,11 +146,14 @@ export function WorkbookImporter({ canPrepareOutputProfiles, projectId, projectN
   const selectedWorksheet = summary?.worksheets.find((worksheet) => worksheet.name === selectedWorksheetName) ?? null;
   const referenceWorksheet = selectedWorksheet ?? summary?.worksheets[0] ?? null;
   const preview = useMemo(() => {
+    if (persistedReview && selectedWorksheet) {
+      return persistedReview.worksheetPreviews.find((item) => item.worksheetName === selectedWorksheet.name) ?? null;
+    }
     if (!workbook || !selectedWorksheet) return null;
     const worksheet = workbook.getWorksheet(selectedWorksheet.name);
     if (!worksheet) return null;
     return createWorksheetPreview(selectedWorksheet.name, worksheet, selectedWorksheet);
-  }, [selectedWorksheet, workbook]);
+  }, [persistedReview, selectedWorksheet, workbook]);
   const excludedRowKeys = useMemo(() => new Set(excludedRows.keys()), [excludedRows]);
   const activeIssues = useMemo(() => (validation?.issues ?? []).filter((issue) => !excludedRowKeys.has(sourceRowKey(issue.worksheetName, issue.rowNumber))), [excludedRowKeys, validation]);
   const worksheetIssues = useMemo(() => validationIssuesForWorksheet(activeIssues, selectedWorksheetName ?? "", ignoredFingerprints), [activeIssues, ignoredFingerprints, selectedWorksheetName]);
@@ -132,7 +162,8 @@ export function WorkbookImporter({ canPrepareOutputProfiles, projectId, projectN
   const validationFilterActive = validationFilters.severity !== "All" || validationFilters.category !== "All";
   const rows = useMemo(() => visibleRows(preview, searchTerm, sort).filter((row) => !validationFilterActive || issuesByRow.has(row.physicalRowNumber)), [issuesByRow, preview, searchTerm, sort, validationFilterActive]);
   const workbookWideRows = useMemo(() => validationRowsForFilters(validation?.issues ?? [], ignoredFingerprints, excludedRowKeys, validationFilters, searchTerm), [excludedRowKeys, ignoredFingerprints, searchTerm, validation, validationFilters]);
-  const issueCountsByWorksheet = useMemo(() => countWorksheetIssues(activeIssues), [activeIssues]);
+  const unresolvedIssues = useMemo(() => activeIssues.filter((issue) => issue.severity !== "Error" || !ignoredFingerprints.has(issue.fingerprint)), [activeIssues, ignoredFingerprints]);
+  const issueCountsByWorksheet = useMemo(() => countWorksheetIssues(unresolvedIssues), [unresolvedIssues]);
   const rowValidationStates = useMemo(() => worksheetRowValidationStates(worksheetIssues, selectedWorksheetName ?? ""), [selectedWorksheetName, worksheetIssues]);
   const visibleEligibleRowKeys = useMemo(() => selectedWorksheetName === null
     ? workbookWideRows.map((row) => row.key)
@@ -141,11 +172,24 @@ export function WorkbookImporter({ canPrepareOutputProfiles, projectId, projectN
   const selectionState = useMemo(() => visibleRowSelectionState(selectedRowKeys, visibleEligibleRowKeys), [selectedRowKeys, visibleEligibleRowKeys]);
   const selectedIssues = useMemo(() => activeIssues.filter((issue) => selectedRowKeys.has(sourceRowKey(issue.worksheetName, issue.rowNumber))), [activeIssues, selectedRowKeys]);
   const selectedBlockingIssues = selectedIssues.filter((issue) => issue.severity === "Error");
-  const activeErrorCount = activeIssues.filter((issue) => issue.severity === "Error").length;
+  const activeErrorCount = unresolvedIssues.filter((issue) => issue.severity === "Error").length;
   const activeWarningCount = activeIssues.filter((issue) => issue.severity === "Warning").length;
+  const ignoredErrorCount = activeIssues.filter((issue) => issue.severity === "Error" && ignoredFingerprints.has(issue.fingerprint)).length;
+  const activeWorksheetsWithIssues = new Set(activeIssues.map((issue) => issue.worksheetName)).size;
+  const activeCategoryCounts = useMemo(() => ({
+    duplicateSku: activeIssues.filter((issue) => issue.category === "duplicate-sku").length,
+    missingRequiredField: activeIssues.filter((issue) => issue.category === "missing-required-field").length,
+    priceIssue: activeIssues.filter((issue) => issue.category === "price").length,
+    marginIssue: activeIssues.filter((issue) => issue.category === "margin").length
+  }), [activeIssues]);
+  const canChangeReview = persistedReview ? canEditReview : canPrepareOutputProfiles;
 
   const rowReferences = useMemo(() => {
     const references = new Map<string, SourceRowReference>();
+    if (persistedReview) {
+      persistedReview.rowReferences.forEach((reference) => references.set(sourceRowKey(reference.worksheetName, reference.physicalRowNumber), reference));
+      return references;
+    }
     if (!workbook || !summary || !validation) return references;
     for (const issue of validation.issues) {
       const key = sourceRowKey(issue.worksheetName, issue.rowNumber);
@@ -157,7 +201,7 @@ export function WorkbookImporter({ canPrepareOutputProfiles, projectId, projectN
       if (reference) references.set(key, reference);
     }
     return references;
-  }, [summary, validation, workbook]);
+  }, [persistedReview, summary, validation, workbook]);
 
   useEffect(() => {
     if (selectAllRef.current) selectAllRef.current.indeterminate = selectionState.indeterminate;
@@ -229,13 +273,28 @@ export function WorkbookImporter({ canPrepareOutputProfiles, projectId, projectN
   }
 
   function confirmDeleteRows() {
-    setExcludedRows((current) => {
-      const next = new Map(current);
-      pendingDeleteRows.forEach((reference) => next.set(sourceRowKey(reference.worksheetName, reference.physicalRowNumber), reference));
-      return next;
+    const rows = pendingDeleteRows;
+    if (rows.length === 0 || isReviewUpdating) return;
+    const applyChange = () => {
+      setExcludedRows((current) => {
+        const next = new Map(current);
+        rows.forEach((reference) => next.set(sourceRowKey(reference.worksheetName, reference.physicalRowNumber), reference));
+        return next;
+      });
+      setSelectedRowKeys(new Set());
+      setPendingDeleteRows([]);
+    };
+    if (!persistedReview) return applyChange();
+    setReviewActionError(null);
+    startReviewUpdate(async () => {
+      const result = await updateSourceRowExclusionsAction({ sourceWorkbookImportId: persistedReview.sourceWorkbookImportId, rows, action: "EXCLUDE" });
+      if (!result.ok) {
+        setReviewActionError(result.error);
+        return;
+      }
+      applyChange();
+      router.refresh();
     });
-    setSelectedRowKeys(new Set());
-    setPendingDeleteRows([]);
   }
 
   function setRowSelected(key: string, checked: boolean) {
@@ -246,21 +305,56 @@ export function WorkbookImporter({ canPrepareOutputProfiles, projectId, projectN
     });
   }
 
+  function changeIgnoredErrors(fingerprints: string[], action: "IGNORE" | "RESTORE") {
+    if (fingerprints.length === 0 || isReviewUpdating) return;
+    const changed = new Set(fingerprints);
+    const applyChange = () => {
+      setIgnoredFingerprints((current) => action === "IGNORE"
+        ? new Set([...current, ...fingerprints])
+        : new Set([...current].filter((fingerprint) => !changed.has(fingerprint))));
+      setSelectedRowKeys(new Set());
+    };
+    if (!persistedReview) return applyChange();
+    setReviewActionError(null);
+    startReviewUpdate(async () => {
+      const result = await updateValidationIssueOverridesAction({ sourceWorkbookImportId: persistedReview.sourceWorkbookImportId, fingerprints, action });
+      if (!result.ok) {
+        setReviewActionError(result.error);
+        return;
+      }
+      applyChange();
+      router.refresh();
+    });
+  }
+
   function ignoreSelectedErrors() {
-    const fingerprints = selectedBlockingIssues.filter((issue) => !ignoredFingerprints.has(issue.fingerprint)).map((issue) => issue.fingerprint);
-    setIgnoredFingerprints((current) => new Set([...current, ...fingerprints]));
+    changeIgnoredErrors(selectedBlockingIssues.filter((issue) => !ignoredFingerprints.has(issue.fingerprint)).map((issue) => issue.fingerprint), "IGNORE");
   }
 
   function restoreSelectedErrors() {
-    const fingerprints = new Set(selectedBlockingIssues.filter((issue) => ignoredFingerprints.has(issue.fingerprint)).map((issue) => issue.fingerprint));
-    setIgnoredFingerprints((current) => new Set([...current].filter((fingerprint) => !fingerprints.has(fingerprint))));
+    changeIgnoredErrors(selectedBlockingIssues.filter((issue) => ignoredFingerprints.has(issue.fingerprint)).map((issue) => issue.fingerprint), "RESTORE");
   }
 
   function restoreDeletedRows(keys: readonly string[]) {
-    setExcludedRows((current) => {
-      const next = new Map(current);
-      keys.forEach((key) => next.delete(key));
-      return next;
+    const rows = keys.flatMap((key) => excludedRows.get(key) ?? []);
+    if (rows.length === 0 || isReviewUpdating) return;
+    const applyChange = () => {
+      setExcludedRows((current) => {
+        const next = new Map(current);
+        keys.forEach((key) => next.delete(key));
+        return next;
+      });
+    };
+    if (!persistedReview) return applyChange();
+    setReviewActionError(null);
+    startReviewUpdate(async () => {
+      const result = await updateSourceRowExclusionsAction({ sourceWorkbookImportId: persistedReview.sourceWorkbookImportId, rows, action: "RESTORE" });
+      if (!result.ok) {
+        setReviewActionError(result.error);
+        return;
+      }
+      applyChange();
+      router.refresh();
     });
   }
 
@@ -278,7 +372,9 @@ export function WorkbookImporter({ canPrepareOutputProfiles, projectId, projectN
         excludedRows: [...excludedRows.values()],
         onProgress: setUploadProgress
       });
-      router.push(result.mappingUrl);
+      router.push(replaceSourceWorkbookImportId
+        ? `/projects/${encodeURIComponent(projectId)}/workbook?source=${encodeURIComponent(result.sourceWorkbookImportId)}`
+        : result.mappingUrl);
     } catch (profilePreparationError) {
       setProfileError(profilePreparationError instanceof Error ? profilePreparationError.message : "The workbook could not be prepared for an Output Profile.");
       setIsPreparingProfile(false);
@@ -291,17 +387,20 @@ export function WorkbookImporter({ canPrepareOutputProfiles, projectId, projectN
       <section className="hero">
         <div className="splitHero">
           <div>
-            <p className="breadcrumb"><Link href="/projects">Projects</Link> › <Link href={`/projects/${projectId}`}>{projectName}</Link> › Workbook</p>
-            <h1>{replaceSourceWorkbookImportId ? "Replace workbook" : "Workbook Explorer"}</h1>
-            <p>Import Excel workbooks, inspect worksheet structure and preview the first 100 data rows before mapping or validation.</p>
+            <p className="breadcrumb"><Link href="/projects">Projects</Link> › <Link href={`/projects/${projectId}`}>{projectName}</Link> › {persistedReview ? "Review workbook" : "Workbook"}</p>
+            <h1>{replaceSourceWorkbookImportId ? "Replace workbook" : persistedReview ? "Review workbook" : "Workbook Explorer"}</h1>
+            <p>{persistedReview
+              ? "Continue reviewing the stored workbook and its saved validation decisions."
+              : "Import Excel workbooks, inspect worksheet structure and preview the first 100 data rows before mapping or validation."}</p>
           </div>
-          <div className="actions"><Link className="secondary" href={`/projects/${projectId}`}>Project</Link>{summary ? <span className="badge success">Workbook loaded</span> : <span className="badge">Ready for upload</span>}</div>
+          <div className="actions"><Link className="secondary" href={`/projects/${projectId}`}>Project</Link>{summary ? <span className="badge success">{persistedReview ? "Stored workbook loaded" : "Workbook loaded"}</span> : <span className="badge">Ready for upload</span>}</div>
         </div>
       </section>
 
       {profileError ? <div className="warningBox">{profileError}</div> : null}
+      {reviewActionError ? <div className="warningBox" role="alert">{reviewActionError}</div> : null}
 
-      <section className="card">
+      {!persistedReview ? <section className="card">
         <div
           className={isDragging ? "workbookDropzone active" : "workbookDropzone"}
           onDragOver={(event) => {
@@ -344,7 +443,7 @@ export function WorkbookImporter({ canPrepareOutputProfiles, projectId, projectN
           />
         </div>
         {error ? <div className="warningBox">{error}</div> : null}
-      </section>
+      </section> : null}
 
       {summary && uploadDetails ? (
         <>
@@ -371,11 +470,11 @@ export function WorkbookImporter({ canPrepareOutputProfiles, projectId, projectN
                 <div><strong>{validation.summary.totalRowsChecked.toLocaleString("en-GB")}</strong><span>Total rows checked</span></div>
                 <div><strong>{activeErrorCount.toLocaleString("en-GB")}</strong><span>Active errors</span></div>
                 <div><strong>{activeWarningCount.toLocaleString("en-GB")}</strong><span>Active warnings</span></div>
-                <div><strong>{validation.summary.worksheetsWithIssues.toLocaleString("en-GB")}</strong><span>Worksheets with issues</span></div>
-                <div><strong>{validation.summary.duplicateSkuCount.toLocaleString("en-GB")}</strong><span>Duplicate SKUs</span></div>
-                <div><strong>{validation.summary.missingRequiredFieldCount.toLocaleString("en-GB")}</strong><span>Missing required fields</span></div>
-                <div><strong>{validation.summary.priceIssueCount.toLocaleString("en-GB")}</strong><span>Price issues</span></div>
-                <div><strong>{validation.summary.marginIssueCount.toLocaleString("en-GB")}</strong><span>Margin issues</span></div>
+                <div><strong>{activeWorksheetsWithIssues.toLocaleString("en-GB")}</strong><span>Worksheets with issues</span></div>
+                <div><strong>{activeCategoryCounts.duplicateSku.toLocaleString("en-GB")}</strong><span>Duplicate SKUs</span></div>
+                <div><strong>{activeCategoryCounts.missingRequiredField.toLocaleString("en-GB")}</strong><span>Missing required fields</span></div>
+                <div><strong>{activeCategoryCounts.priceIssue.toLocaleString("en-GB")}</strong><span>Price issues</span></div>
+                <div><strong>{activeCategoryCounts.marginIssue.toLocaleString("en-GB")}</strong><span>Margin issues</span></div>
               </div>
               {activeErrorCount > 0 ? (
                 <p className="validationErrorGuidance" role="alert">Errors were found in the processed workbook data. Correct, ignore, or delete the affected rows before generating output.</p>
@@ -383,6 +482,7 @@ export function WorkbookImporter({ canPrepareOutputProfiles, projectId, projectN
               {activeWarningCount > 0 ? (
                 <p className="validationWarningGuidance">Warnings identify values to review but do not block Output Profile design.</p>
               ) : null}
+              {ignoredErrorCount > 0 ? <p className="muted"><strong>{ignoredErrorCount.toLocaleString("en-GB")} ignored {ignoredErrorCount === 1 ? "error" : "errors"}</strong> · Ignored errors remain visible but do not block output.</p> : null}
               {excludedRows.size > 0 ? <p className="muted"><strong>{excludedRows.size} deleted {excludedRows.size === 1 ? "row" : "rows"}</strong> · <button className="linkButton" type="button" onClick={() => setDeletedRowsReviewOpen(true)}>View / restore deleted rows</button></p> : null}
             </section>
           ) : null}
@@ -408,15 +508,15 @@ export function WorkbookImporter({ canPrepareOutputProfiles, projectId, projectN
               <span className="worksheetRowLegendItem rowWarning"><span aria-hidden="true" />Warning</span>
               <span className="worksheetRowLegendItem rowIgnoredError"><span aria-hidden="true" />Ignored error</span>
             </div>
-            {selectedRowKeys.size > 0 ? <div className="actions validationPreviewActions" aria-label="Selected validation row actions">
+            {canChangeReview && selectedRowKeys.size > 0 ? <div className="actions validationPreviewActions" aria-label="Selected validation row actions">
               <strong>{selectedRowKeys.size} {selectedRowKeys.size === 1 ? "row" : "rows"} selected</strong>
-              <button className="dangerButton" type="button" onClick={deleteSelectedRows}>Delete selected rows</button>
-              <button className="secondary" type="button" disabled={!selectedBlockingIssues.some((issue) => !ignoredFingerprints.has(issue.fingerprint))} onClick={ignoreSelectedErrors}>Ignore selected errors</button>
-              <button className="secondary" type="button" disabled={!selectedBlockingIssues.some((issue) => ignoredFingerprints.has(issue.fingerprint))} onClick={restoreSelectedErrors}>Restore selected errors</button>
+              <button className="dangerButton" type="button" disabled={isReviewUpdating} onClick={deleteSelectedRows}>Delete selected rows</button>
+              <button className="secondary" type="button" disabled={isReviewUpdating || !selectedBlockingIssues.some((issue) => !ignoredFingerprints.has(issue.fingerprint))} onClick={ignoreSelectedErrors}>Ignore selected errors</button>
+              <button className="secondary" type="button" disabled={isReviewUpdating || !selectedBlockingIssues.some((issue) => ignoredFingerprints.has(issue.fingerprint))} onClick={restoreSelectedErrors}>Restore selected errors</button>
             </div> : null}
-            {validation && activeIssues.some((issue) => issue.severity === "Error") ? <div className="actions validationPreviewActions">
-              <button className="secondary" type="button" onClick={() => setIgnoredFingerprints(new Set(activeIssues.filter((issue) => issue.severity === "Error").map((issue) => issue.fingerprint)))}>Ignore all blocking errors</button>
-              <button className="secondary" type="button" disabled={ignoredFingerprints.size === 0} onClick={() => setIgnoredFingerprints(new Set())}>Restore all ignored errors</button>
+            {canChangeReview && validation && activeIssues.some((issue) => issue.severity === "Error") ? <div className="actions validationPreviewActions">
+              <button className="secondary" type="button" disabled={isReviewUpdating || activeErrorCount === 0} onClick={() => changeIgnoredErrors(activeIssues.filter((issue) => issue.severity === "Error" && !ignoredFingerprints.has(issue.fingerprint)).map((issue) => issue.fingerprint), "IGNORE")}>Ignore all blocking errors</button>
+              <button className="secondary" type="button" disabled={isReviewUpdating || ignoredErrorCount === 0} onClick={() => changeIgnoredErrors(activeIssues.filter((issue) => issue.severity === "Error" && ignoredFingerprints.has(issue.fingerprint)).map((issue) => issue.fingerprint), "RESTORE")}>Restore all ignored errors</button>
             </div> : null}
 
             <div className="worksheetPreviewPanel" tabIndex={0}>
@@ -424,13 +524,13 @@ export function WorkbookImporter({ canPrepareOutputProfiles, projectId, projectN
                 workbookWideRows.length > 0 ? <div className="previewTableWrap validationWorkbookWideTableWrap">
                   <table className="previewTable validationWorkbookWideTable">
                     <thead><tr>
-                      <th className="validationSelectionColumn"><input ref={selectAllRef} type="checkbox" checked={selectionState.checked} aria-label={`Select all ${visibleEligibleRowKeys.length} visible validation rows`} onChange={(event) => setSelectedRowKeys((current) => updateVisibleRowSelection(current, visibleEligibleRowKeys, event.target.checked))} /></th>
+                      <th className="validationSelectionColumn"><input ref={selectAllRef} type="checkbox" checked={selectionState.checked} disabled={!canChangeReview || isReviewUpdating} aria-label={`Select all ${visibleEligibleRowKeys.length} visible validation rows`} onChange={(event) => setSelectedRowKeys((current) => updateVisibleRowSelection(current, visibleEligibleRowKeys, event.target.checked))} /></th>
                       <th>Worksheet</th><th>Row</th><th>Severity</th><th>Current value</th><th>Rule / message</th>
                     </tr></thead>
                     <tbody>{workbookWideRows.map((row) => {
                       const rowState = worksheetRowValidationStates(row.issues, row.worksheetName).get(row.rowNumber) ?? "normal";
                       return <tr className={`worksheetDataRow ${rowState}`} key={row.key}>
-                        <td className="validationSelectionColumn"><input type="checkbox" aria-label={`Select ${row.worksheetName} row ${row.rowNumber}`} checked={selectedRowKeys.has(row.key)} onChange={(event) => setRowSelected(row.key, event.target.checked)} /></td>
+                        <td className="validationSelectionColumn"><input type="checkbox" disabled={!canChangeReview || isReviewUpdating} aria-label={`Select ${row.worksheetName} row ${row.rowNumber}`} checked={selectedRowKeys.has(row.key)} onChange={(event) => setRowSelected(row.key, event.target.checked)} /></td>
                         <td>{row.worksheetName}</td><td>{row.rowNumber}</td>
                         <td><span className={rowState === "error" ? "badge danger" : rowState === "warning" ? "badge warning" : "badge"}>{rowSeverityLabel(row.issues)}</span></td>
                         <td><span className="validationIssueStack">{row.issues.slice(0, 3).map((issue) => <span key={issue.fingerprint}>{issue.field}: {issue.currentValue || "Blank"}</span>)}{row.issues.length > 3 ? <small>+ {row.issues.length - 3} more</small> : null}</span></td>
@@ -453,7 +553,7 @@ export function WorkbookImporter({ canPrepareOutputProfiles, projectId, projectN
                   <table className="previewTable">
                     <thead>
                       <tr>
-                        <th className="validationSelectionColumn"><input ref={selectAllRef} type="checkbox" checked={selectionState.checked} aria-label={`Select all ${visibleEligibleRowKeys.length} visible validation rows`} onChange={(event) => setSelectedRowKeys((current) => updateVisibleRowSelection(current, visibleEligibleRowKeys, event.target.checked))} /></th>
+                        <th className="validationSelectionColumn"><input ref={selectAllRef} type="checkbox" checked={selectionState.checked} disabled={!canChangeReview || isReviewUpdating} aria-label={`Select all ${visibleEligibleRowKeys.length} visible validation rows`} onChange={(event) => setSelectedRowKeys((current) => updateVisibleRowSelection(current, visibleEligibleRowKeys, event.target.checked))} /></th>
                         <th className="validationSeverityColumn">Severity</th>
                         <th className="validationValueColumn">Current value</th>
                         <th className="validationMessageColumn">Rule / message</th>
@@ -475,7 +575,7 @@ export function WorkbookImporter({ canPrepareOutputProfiles, projectId, projectN
                         const rowKey = sourceRowKey(selectedWorksheetName, row.physicalRowNumber);
                         return (
                         <tr aria-label={`${rowDescription}, worksheet row ${row.physicalRowNumber}`} className={rowState === "normal" ? undefined : `worksheetDataRow ${rowState}`} key={`${selectedWorksheetName}-${row.physicalRowNumber}`}>
-                          <td className="validationSelectionColumn">{rowIssues.length > 0 ? <input type="checkbox" aria-label={`Select ${selectedWorksheetName} row ${row.physicalRowNumber}`} checked={selectedRowKeys.has(rowKey)} onChange={(event) => setRowSelected(rowKey, event.target.checked)} /> : null}</td>
+                          <td className="validationSelectionColumn">{rowIssues.length > 0 ? <input type="checkbox" disabled={!canChangeReview || isReviewUpdating} aria-label={`Select ${selectedWorksheetName} row ${row.physicalRowNumber}`} checked={selectedRowKeys.has(rowKey)} onChange={(event) => setRowSelected(rowKey, event.target.checked)} /> : null}</td>
                           <td className="validationSeverityColumn"><span className={rowState === "error" ? "badge danger" : rowState === "warning" ? "badge warning" : rowState === "ignored-error" ? "badge" : ""}>{rowSeverityLabel(rowIssues)}</span></td>
                           <td className="validationValueColumn"><span className="validationIssueStack">{rowIssues.slice(0, 3).map((issue) => <span key={issue.fingerprint}>{issue.currentValue || "Blank"}</span>)}{rowIssues.length > 3 ? <small>+ {rowIssues.length - 3} more</small> : null}</span></td>
                           <td className="validationMessageColumn"><span className="validationIssueStack">{rowIssues.slice(0, 3).map((issue) => <span key={issue.fingerprint}>{issue.message}</span>)}{rowIssues.length > 3 ? <small>+ {rowIssues.length - 3} more</small> : null}</span></td>
@@ -503,8 +603,8 @@ export function WorkbookImporter({ canPrepareOutputProfiles, projectId, projectN
             </div>
           </section>
 
-          {deletedRowsReviewOpen ? <div className="validationReviewBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setDeletedRowsReviewOpen(false); }}><section className="validationReviewDialog" role="dialog" aria-modal="true" aria-labelledby="deleted-rows-title"><div className="sectionHeader"><div><h2 id="deleted-rows-title">Deleted rows</h2><p className="muted">These rows are excluded from processed data and generated outputs. The uploaded Excel file is unchanged.</p></div><button className="secondary" type="button" onClick={() => setDeletedRowsReviewOpen(false)}>Close</button></div><div className="actions"><button className="secondary" type="button" disabled={excludedRows.size === 0} onClick={() => restoreDeletedRows([...excludedRows.keys()])}>Restore all deleted rows</button></div><div className="previewTableWrap"><table className="previewTable"><thead><tr><th>Worksheet</th><th>Row</th><th>Original severity</th><th>Current value</th><th>Validation reason</th><th>Action</th></tr></thead><tbody>{[...excludedRows.entries()].map(([key, row]) => { const rowIssues = (validation?.issues ?? []).filter((issue) => issue.worksheetName === row.worksheetName && issue.rowNumber === row.physicalRowNumber); return <tr key={key}><td>{row.worksheetName}</td><td>{row.physicalRowNumber}</td><td>{rowSeverityLabel(rowIssues.map((issue) => ({ ...issue, ignored: ignoredFingerprints.has(issue.fingerprint) })))}</td><td>{rowIssues.slice(0, 3).map((issue) => issue.currentValue || "Blank").join(" · ")}</td><td>{rowIssues.slice(0, 3).map((issue) => issue.message).join(" · ")}{rowIssues.length > 3 ? ` · + ${rowIssues.length - 3} more` : ""}</td><td><button className="secondary" type="button" onClick={() => restoreDeletedRows([key])}>Restore</button></td></tr>; })}</tbody></table></div></section></div> : null}
-          {pendingDeleteRows.length > 0 ? <div className="validationReviewBackdrop" role="presentation"><section className="validationReviewDialog compactConfirmation" role="dialog" aria-modal="true" aria-labelledby="delete-selected-rows-title"><h2 id="delete-selected-rows-title">Delete selected rows</h2><p>Delete {pendingDeleteRows.length} selected {pendingDeleteRows.length === 1 ? "row" : "rows"} from this workbook&apos;s processed data? They will be excluded from generated outputs. The original uploaded Excel file will not be changed.</p><div className="actions"><button className="secondary" type="button" onClick={() => setPendingDeleteRows([])}>Cancel</button><button className="dangerButton" type="button" onClick={confirmDeleteRows}>Delete rows</button></div></section></div> : null}
+          {deletedRowsReviewOpen ? <div className="validationReviewBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setDeletedRowsReviewOpen(false); }}><section className="validationReviewDialog" role="dialog" aria-modal="true" aria-labelledby="deleted-rows-title"><div className="sectionHeader"><div><h2 id="deleted-rows-title">Deleted rows</h2><p className="muted">These rows are excluded from processed data and generated outputs. The uploaded Excel file is unchanged.</p></div><button className="secondary" type="button" onClick={() => setDeletedRowsReviewOpen(false)}>Close</button></div>{canChangeReview ? <div className="actions"><button className="secondary" type="button" disabled={excludedRows.size === 0 || isReviewUpdating} onClick={() => restoreDeletedRows([...excludedRows.keys()])}>Restore all deleted rows</button></div> : null}<div className="previewTableWrap"><table className="previewTable"><thead><tr><th>Worksheet</th><th>Row</th><th>Original severity</th><th>Current value</th><th>Validation reason</th>{canChangeReview ? <th>Action</th> : null}</tr></thead><tbody>{[...excludedRows.entries()].map(([key, row]) => { const rowIssues = (validation?.issues ?? []).filter((issue) => issue.worksheetName === row.worksheetName && issue.rowNumber === row.physicalRowNumber); return <tr key={key}><td>{row.worksheetName}</td><td>{row.physicalRowNumber}</td><td>{rowSeverityLabel(rowIssues.map((issue) => ({ ...issue, ignored: ignoredFingerprints.has(issue.fingerprint) })))}</td><td>{rowIssues.slice(0, 3).map((issue) => issue.currentValue || "Blank").join(" · ")}</td><td>{rowIssues.slice(0, 3).map((issue) => issue.message).join(" · ")}{rowIssues.length > 3 ? ` · + ${rowIssues.length - 3} more` : ""}</td>{canChangeReview ? <td><button className="secondary" type="button" disabled={isReviewUpdating} onClick={() => restoreDeletedRows([key])}>Restore</button></td> : null}</tr>; })}</tbody></table></div></section></div> : null}
+          {pendingDeleteRows.length > 0 ? <div className="validationReviewBackdrop" role="presentation"><section className="validationReviewDialog compactConfirmation" role="dialog" aria-modal="true" aria-labelledby="delete-selected-rows-title"><h2 id="delete-selected-rows-title">Delete selected rows</h2><p>Delete {pendingDeleteRows.length} selected {pendingDeleteRows.length === 1 ? "row" : "rows"} from this workbook&apos;s processed data? They will be excluded from generated outputs. The original uploaded Excel file will not be changed.</p><div className="actions"><button className="secondary" type="button" disabled={isReviewUpdating} onClick={() => setPendingDeleteRows([])}>Cancel</button><button className="dangerButton" type="button" disabled={isReviewUpdating} onClick={confirmDeleteRows}>{isReviewUpdating ? "Deleting" : "Delete rows"}</button></div></section></div> : null}
 
           {validation && selectedFile ? (
             <ValidationNextSteps
@@ -517,6 +617,19 @@ export function WorkbookImporter({ canPrepareOutputProfiles, projectId, projectN
               onContinue={prepareOutputProfile}
             />
           ) : null}
+          {validation && persistedReview ? <section className="card validationNextSteps" aria-labelledby="persisted-review-next-step-title">
+            <div>
+              <p className="sheetLabel">Next step</p>
+              <h2 id="persisted-review-next-step-title">Continue to Build Output</h2>
+              <p className="muted">{activeErrorCount > 0
+                ? `${activeErrorCount.toLocaleString("en-GB")} unresolved blocking ${activeErrorCount === 1 ? "error remains" : "errors remain"}. Ignore, delete or correct those rows before generation.`
+                : "The saved validation decisions are ready to use when building output."}</p>
+            </div>
+            <div className="actions validationNextStepActions">
+              <Link className="secondary prominentSecondary" href={`/projects/${projectId}/workbook?replace=${encodeURIComponent(persistedReview.sourceWorkbookImportId)}`}>Replace workbook</Link>
+              {buildOutputUrl ? <Link className="primary" href={buildOutputUrl}>Build output</Link> : null}
+            </div>
+          </section> : null}
         </>
       ) : null}
     </>

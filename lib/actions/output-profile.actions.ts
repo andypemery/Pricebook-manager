@@ -133,11 +133,13 @@ export async function associateOutputProfileWithProjectAction(input: {
         where: { projectId_outputProfileId: { projectId: project.id, outputProfileId: profile.id } },
         select: { id: true }
       });
-      const association = existing ?? await transaction.projectOutputProfile.create({
-        data: { tenantId: actor.tenantId, projectId: project.id, outputProfileId: profile.id, createdById: actor.id },
-        select: { id: true }
-      });
-      if (!existing) await transaction.project.update({ where: { id: project.id }, data: { updatedById: actor.id } });
+      const association = existing
+        ? await transaction.projectOutputProfile.update({ where: { id: existing.id }, data: { updatedAt: new Date() }, select: { id: true } })
+        : await transaction.projectOutputProfile.create({
+            data: { tenantId: actor.tenantId, projectId: project.id, outputProfileId: profile.id, createdById: actor.id },
+            select: { id: true }
+          });
+      await transaction.project.update({ where: { id: project.id }, data: { updatedById: actor.id } });
       return { profile, association, created: !existing };
     });
     if (result.created) {

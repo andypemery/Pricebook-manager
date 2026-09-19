@@ -65,7 +65,7 @@ export async function getProjectDetail(db: PrismaClient, tenantId: string, proje
       outputProfiles: {
         where: { tenantId, outputProfile: { tenantId, sourceWorkbookImport: { tenantId } } },
         orderBy: { updatedAt: "desc" },
-        select: { outputProfile: { select: { id: true, name: true, outputFormat: true, updatedAt: true, _count: { select: { columns: true } } } } }
+        select: { outputProfile: { select: { id: true, name: true } } }
       }
     }
   });

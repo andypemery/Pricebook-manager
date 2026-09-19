@@ -17,6 +17,7 @@ export async function updateValidationIssueOverridesAction(input: { sourceWorkbo
     const state = await changeValidationIssueOverrides(prisma, actor, input.sourceWorkbookImportId, input.fingerprints, input.action);
     await audit({ tenantId: actor.tenantId, userId: actor.id, action: input.action === "IGNORE" ? "VALIDATION_ISSUES_IGNORED" : "VALIDATION_ISSUES_RESTORED", entityType: "SourceWorkbookImport", entityId: input.sourceWorkbookImportId, after: { issueCount: input.fingerprints.length } });
     revalidatePath("/mapping");
+    revalidatePath(`/projects/${state.source.projectId}/workbook`);
     return { ok: true as const, blockingCount: state.blockingCount, ignoredBlockingCount: state.ignoredBlockingCount, unresolvedBlockingCount: state.unresolvedBlockingCount };
   } catch (error) {
     if (error instanceof ValidationIssueOverrideError || error instanceof Error && error.message.includes("re-uploaded")) return { ok: false as const, error: error.message };

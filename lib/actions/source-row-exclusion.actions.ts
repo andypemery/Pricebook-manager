@@ -32,6 +32,7 @@ export async function updateSourceRowExclusionsAction(input: {
       after: { count: result.changedCount, worksheetNames: result.worksheetNames }
     });
     revalidatePath("/mapping");
+    revalidatePath(`/projects/${result.projectId}/workbook`);
     return { ok: true as const, changedCount: result.changedCount };
   } catch (error) {
     if (error instanceof SourceRowExclusionError || error instanceof Error && error.message.includes("re-uploaded")) {

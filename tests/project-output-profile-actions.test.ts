@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   transactionAssociationFindFirst: vi.fn(),
   transactionAssociationFindUnique: vi.fn(),
   transactionAssociationCreate: vi.fn(),
+  transactionAssociationUpdate: vi.fn(),
   transactionProfileFindFirst: vi.fn(),
   transaction: vi.fn()
 }));
@@ -66,6 +67,7 @@ describe("Project-aware Output Profile mutations", () => {
     mocks.transactionAssociationFindFirst.mockResolvedValue({ projectId: "project-1" });
     mocks.transactionAssociationFindUnique.mockResolvedValue(null);
     mocks.transactionAssociationCreate.mockResolvedValue({ id: "association-copy" });
+    mocks.transactionAssociationUpdate.mockResolvedValue({ id: "association-existing" });
     mocks.transactionProfileFindFirst.mockResolvedValue({ id: "profile-1", name: "Reusable" });
     mocks.duplicateProfile.mockResolvedValue({ id: "profile-copy", name: "NHS Contract - Copy", updatedAt: new Date() });
     mocks.transaction.mockImplementation(async (callback: (transaction: unknown) => Promise<unknown>) => callback({
@@ -74,6 +76,7 @@ describe("Project-aware Output Profile mutations", () => {
         findFirst: mocks.transactionAssociationFindFirst,
         findUnique: mocks.transactionAssociationFindUnique,
         create: mocks.transactionAssociationCreate,
+        update: mocks.transactionAssociationUpdate,
         upsert: mocks.associationUpsert
       },
       outputProfile: { findFirst: mocks.transactionProfileFindFirst }
@@ -142,12 +145,17 @@ describe("Project-aware Output Profile mutations", () => {
     expect(mocks.saveProfile).not.toHaveBeenCalled();
   });
 
-  it("keeps Project association idempotent", async () => {
+  it("refreshes existing Project association and Project activity without creating a duplicate", async () => {
     mocks.transactionAssociationFindUnique.mockResolvedValueOnce({ id: "association-existing" });
     await expect(associateOutputProfileWithProjectAction({ projectId: "project-1", outputProfileId: "profile-1", sourceWorkbookImportId: "source-1", sourceWorksheetId: "worksheet-1" }))
       .resolves.toEqual({ ok: true, profileId: "profile-1", message: "Output Profile is already used in this Project." });
     expect(mocks.transactionAssociationCreate).not.toHaveBeenCalled();
-    expect(mocks.projectUpdate).not.toHaveBeenCalled();
+    expect(mocks.transactionAssociationUpdate).toHaveBeenCalledWith({
+      where: { id: "association-existing" },
+      data: { updatedAt: expect.any(Date) },
+      select: { id: true }
+    });
+    expect(mocks.projectUpdate).toHaveBeenCalledWith({ where: { id: "project-1" }, data: { updatedById: "user-1" } });
   });
 
   it("rejects cross-tenant or mismatched Project/profile selection uniformly", async () => {
