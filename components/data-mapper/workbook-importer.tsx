@@ -28,6 +28,7 @@ import {
   rowSeverityLabel,
   sourceCellValidationState,
   updateVisibleRowSelection,
+  validationActionScope,
   validationRowsForFilters,
   validationIssuesForWorksheet,
   visibleRowSelectionState,
@@ -138,6 +139,7 @@ export function WorkbookImporter({
   const [error, setError] = useState<string | null>(null);
   const [profileError, setProfileError] = useState<string | null>(null);
   const [reviewActionError, setReviewActionError] = useState<string | null>(null);
+  const [reviewActionStatus, setReviewActionStatus] = useState<string | null>(null);
   const [isReviewUpdating, startReviewUpdate] = useTransition();
   const worksheetPreviewPan = useHorizontalPan<HTMLDivElement>();
   const selectAllRef = useRef<HTMLInputElement>(null);
@@ -165,13 +167,20 @@ export function WorkbookImporter({
   const unresolvedIssues = useMemo(() => activeIssues.filter((issue) => issue.severity !== "Error" || !ignoredFingerprints.has(issue.fingerprint)), [activeIssues, ignoredFingerprints]);
   const issueCountsByWorksheet = useMemo(() => countWorksheetIssues(unresolvedIssues), [unresolvedIssues]);
   const rowValidationStates = useMemo(() => worksheetRowValidationStates(worksheetIssues, selectedWorksheetName ?? ""), [selectedWorksheetName, worksheetIssues]);
-  const visibleEligibleRowKeys = useMemo(() => selectedWorksheetName === null
-    ? workbookWideRows.map((row) => row.key)
-    : rows.filter((row) => issuesByRow.has(row.physicalRowNumber)).map((row) => sourceRowKey(selectedWorksheetName, row.physicalRowNumber)),
-  [issuesByRow, rows, selectedWorksheetName, workbookWideRows]);
+  const visibleValidationRows = useMemo(() => selectedWorksheetName === null
+    ? workbookWideRows
+    : rows.flatMap((row) => {
+      const issues = issuesByRow.get(row.physicalRowNumber) ?? [];
+      return issues.length === 0 ? [] : [{
+        key: sourceRowKey(selectedWorksheetName, row.physicalRowNumber),
+        worksheetName: selectedWorksheetName,
+        rowNumber: row.physicalRowNumber,
+        issues
+      }];
+    }), [issuesByRow, rows, selectedWorksheetName, workbookWideRows]);
+  const visibleEligibleRowKeys = useMemo(() => visibleValidationRows.map((row) => row.key), [visibleValidationRows]);
   const selectionState = useMemo(() => visibleRowSelectionState(selectedRowKeys, visibleEligibleRowKeys), [selectedRowKeys, visibleEligibleRowKeys]);
-  const selectedIssues = useMemo(() => activeIssues.filter((issue) => selectedRowKeys.has(sourceRowKey(issue.worksheetName, issue.rowNumber))), [activeIssues, selectedRowKeys]);
-  const selectedBlockingIssues = selectedIssues.filter((issue) => issue.severity === "Error");
+  const actionScope = useMemo(() => validationActionScope(visibleValidationRows, selectedRowKeys), [selectedRowKeys, visibleValidationRows]);
   const activeErrorCount = unresolvedIssues.filter((issue) => issue.severity === "Error").length;
   const activeWarningCount = activeIssues.filter((issue) => issue.severity === "Warning").length;
   const ignoredErrorCount = activeIssues.filter((issue) => issue.severity === "Error" && ignoredFingerprints.has(issue.fingerprint)).length;
@@ -264,6 +273,17 @@ export function WorkbookImporter({
     setValidationFilters((current) => ({ ...current, worksheet: worksheetName }));
     setSearchTerm("");
     setSort(null);
+    setSelectedRowKeys(new Set());
+  }
+
+  function updateValidationFilter<Key extends "severity" | "category">(key: Key, value: ValidationFilters[Key]) {
+    setValidationFilters((current) => ({ ...current, [key]: value }));
+    setSelectedRowKeys(new Set());
+  }
+
+  function updateValidationSearch(value: string) {
+    setSearchTerm(value);
+    setSelectedRowKeys(new Set());
   }
 
   function deleteSelectedRows() {
@@ -305,7 +325,7 @@ export function WorkbookImporter({
     });
   }
 
-  function changeIgnoredErrors(fingerprints: string[], action: "IGNORE" | "RESTORE") {
+  function changeIgnoredErrors(fingerprints: string[], action: "IGNORE" | "RESTORE", scope: "selected" | "visible") {
     if (fingerprints.length === 0 || isReviewUpdating) return;
     const changed = new Set(fingerprints);
     const applyChange = () => {
@@ -313,9 +333,12 @@ export function WorkbookImporter({
         ? new Set([...current, ...fingerprints])
         : new Set([...current].filter((fingerprint) => !changed.has(fingerprint))));
       setSelectedRowKeys(new Set());
+      const qualifier = scope === "selected" ? "selected" : action === "IGNORE" ? "visible blocking" : "visible ignored";
+      setReviewActionStatus(`${fingerprints.length} ${qualifier} ${fingerprints.length === 1 ? "error" : "errors"} ${action === "IGNORE" ? "ignored" : "restored"}.`);
     };
-    if (!persistedReview) return applyChange();
+    setReviewActionStatus(null);
     setReviewActionError(null);
+    if (!persistedReview) return applyChange();
     startReviewUpdate(async () => {
       const result = await updateValidationIssueOverridesAction({ sourceWorkbookImportId: persistedReview.sourceWorkbookImportId, fingerprints, action });
       if (!result.ok) {
@@ -328,11 +351,11 @@ export function WorkbookImporter({
   }
 
   function ignoreSelectedErrors() {
-    changeIgnoredErrors(selectedBlockingIssues.filter((issue) => !ignoredFingerprints.has(issue.fingerprint)).map((issue) => issue.fingerprint), "IGNORE");
+    changeIgnoredErrors(actionScope.selectedUnresolvedErrorFingerprints, "IGNORE", "selected");
   }
 
   function restoreSelectedErrors() {
-    changeIgnoredErrors(selectedBlockingIssues.filter((issue) => ignoredFingerprints.has(issue.fingerprint)).map((issue) => issue.fingerprint), "RESTORE");
+    changeIgnoredErrors(actionScope.selectedIgnoredErrorFingerprints, "RESTORE", "selected");
   }
 
   function restoreDeletedRows(keys: readonly string[]) {
@@ -494,11 +517,11 @@ export function WorkbookImporter({
                 <p className="muted">Review issue rows across the workbook, or choose one worksheet for the integrated source preview.</p>
               </div>
               <div className="workbookPreviewControls">
-                <label className="searchBox"><Search aria-hidden="true" size={18} /><span className="visuallyHidden">Search worksheet preview</span><input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Search preview" /></label>
+                <label className="searchBox"><Search aria-hidden="true" size={18} /><span className="visuallyHidden">Search worksheet preview</span><input value={searchTerm} onChange={(event) => updateValidationSearch(event.target.value)} placeholder="Search preview" /></label>
                 <div className="validationFilters">
                   <label className="field"><span>Worksheet</span><select value={validationFilters.worksheet} onChange={(event) => selectWorksheet(event.target.value)}><option>All worksheets</option>{summary.worksheets.map((worksheet) => <option key={worksheet.name} value={worksheet.name}>{worksheet.name}</option>)}</select></label>
-                  <label className="field"><span>Severity</span><select value={validationFilters.severity} onChange={(event) => setValidationFilters((current) => ({ ...current, severity: event.target.value as ValidationFilters["severity"] }))}><option>All</option><option>Error</option><option>Warning</option></select></label>
-                  <label className="field"><span>Issue type</span><select value={validationFilters.category} onChange={(event) => setValidationFilters((current) => ({ ...current, category: event.target.value as ValidationFilters["category"] }))}><option>All</option>{Object.entries(validationCategoryLabels).map(([category, label]) => <option key={category} value={category}>{label}</option>)}</select></label>
+                  <label className="field"><span>Severity</span><select value={validationFilters.severity} onChange={(event) => updateValidationFilter("severity", event.target.value as ValidationFilters["severity"])}><option>All</option><option>Error</option><option>Warning</option></select></label>
+                  <label className="field"><span>Issue type</span><select value={validationFilters.category} onChange={(event) => updateValidationFilter("category", event.target.value as ValidationFilters["category"])}><option>All</option>{Object.entries(validationCategoryLabels).map(([category, label]) => <option key={category} value={category}>{label}</option>)}</select></label>
                 </div>
               </div>
             </div>
@@ -508,15 +531,16 @@ export function WorkbookImporter({
               <span className="worksheetRowLegendItem rowWarning"><span aria-hidden="true" />Warning</span>
               <span className="worksheetRowLegendItem rowIgnoredError"><span aria-hidden="true" />Ignored error</span>
             </div>
-            {canChangeReview && selectedRowKeys.size > 0 ? <div className="actions validationPreviewActions" aria-label="Selected validation row actions">
-              <strong>{selectedRowKeys.size} {selectedRowKeys.size === 1 ? "row" : "rows"} selected</strong>
+            {reviewActionStatus ? <div className="successBox" role="status" aria-live="polite">{reviewActionStatus}</div> : null}
+            {canChangeReview && selectionState.selectedVisibleCount > 0 ? <div className="actions validationPreviewActions" aria-label="Selected validation row actions">
+              <strong>{selectionState.selectedVisibleCount} {selectionState.selectedVisibleCount === 1 ? "row" : "rows"} selected</strong>
               <button className="dangerButton" type="button" disabled={isReviewUpdating} onClick={deleteSelectedRows}>Delete selected rows</button>
-              <button className="secondary" type="button" disabled={isReviewUpdating || !selectedBlockingIssues.some((issue) => !ignoredFingerprints.has(issue.fingerprint))} onClick={ignoreSelectedErrors}>Ignore selected errors</button>
-              <button className="secondary" type="button" disabled={isReviewUpdating || !selectedBlockingIssues.some((issue) => ignoredFingerprints.has(issue.fingerprint))} onClick={restoreSelectedErrors}>Restore selected errors</button>
+              <button className="secondary" type="button" disabled={isReviewUpdating || actionScope.selectedUnresolvedErrorFingerprints.length === 0} onClick={ignoreSelectedErrors}>Ignore selected errors</button>
+              <button className="secondary" type="button" disabled={isReviewUpdating || actionScope.selectedIgnoredErrorFingerprints.length === 0} onClick={restoreSelectedErrors}>Restore selected errors</button>
             </div> : null}
             {canChangeReview && validation && activeIssues.some((issue) => issue.severity === "Error") ? <div className="actions validationPreviewActions">
-              <button className="secondary" type="button" disabled={isReviewUpdating || activeErrorCount === 0} onClick={() => changeIgnoredErrors(activeIssues.filter((issue) => issue.severity === "Error" && !ignoredFingerprints.has(issue.fingerprint)).map((issue) => issue.fingerprint), "IGNORE")}>Ignore all blocking errors</button>
-              <button className="secondary" type="button" disabled={isReviewUpdating || ignoredErrorCount === 0} onClick={() => changeIgnoredErrors(activeIssues.filter((issue) => issue.severity === "Error" && ignoredFingerprints.has(issue.fingerprint)).map((issue) => issue.fingerprint), "RESTORE")}>Restore all ignored errors</button>
+              <button className="secondary" type="button" disabled={isReviewUpdating || actionScope.visibleUnresolvedErrorFingerprints.length === 0} onClick={() => changeIgnoredErrors(actionScope.visibleUnresolvedErrorFingerprints, "IGNORE", "visible")}>Ignore {actionScope.visibleUnresolvedErrorFingerprints.length || "all"} visible blocking {actionScope.visibleUnresolvedErrorFingerprints.length === 1 ? "error" : "errors"}</button>
+              <button className="secondary" type="button" disabled={isReviewUpdating || actionScope.visibleIgnoredErrorFingerprints.length === 0} onClick={() => changeIgnoredErrors(actionScope.visibleIgnoredErrorFingerprints, "RESTORE", "visible")}>Restore {actionScope.visibleIgnoredErrorFingerprints.length || "all"} visible ignored {actionScope.visibleIgnoredErrorFingerprints.length === 1 ? "error" : "errors"}</button>
             </div> : null}
 
             <div className="worksheetPreviewPanel" tabIndex={0}>

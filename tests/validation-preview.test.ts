@@ -7,6 +7,7 @@ import {
   rowSeverityLabel,
   sourceCellValidationState,
   updateVisibleRowSelection,
+  validationActionScope,
   validationRowsForFilters,
   visibleRowSelectionState,
   validationIssuesForWorksheet
@@ -113,5 +114,64 @@ describe("consolidated worksheet validation preview", () => {
     const rows = validationRowsForFilters(issues, new Set(["ignored-sku"]), excluded, { worksheet: "All worksheets", severity: "All", category: "All" });
     expect(rows.map((row) => row.key)).toEqual([sourceRowKey("Products", 5), sourceRowKey("Other", 4)]);
     expect(rows[0].issues[0].ignored).toBe(true);
+  });
+
+  it("derives selected unresolved and ignored errors independently from visible physical rows", () => {
+    const rows = validationRowsForFilters(issues, new Set(["ignored-sku"]), new Set(), { worksheet: "Products", severity: "All", category: "All" });
+    const unresolvedOnly = validationActionScope(rows, new Set([sourceRowKey("Products", 4)]));
+    const ignoredOnly = validationActionScope(rows, new Set([sourceRowKey("Products", 5)]));
+    const mixed = validationActionScope(rows, new Set(rows.map((row) => row.key)));
+
+    expect(unresolvedOnly.selectedUnresolvedErrorFingerprints).toEqual(["error-price"]);
+    expect(unresolvedOnly.selectedIgnoredErrorFingerprints).toEqual([]);
+    expect(ignoredOnly.selectedUnresolvedErrorFingerprints).toEqual([]);
+    expect(ignoredOnly.selectedIgnoredErrorFingerprints).toEqual(["ignored-sku"]);
+    expect(mixed.selectedUnresolvedErrorFingerprints).toEqual(["error-price"]);
+    expect(mixed.selectedIgnoredErrorFingerprints).toEqual(["ignored-sku"]);
+  });
+
+  it("scopes visible Ignore and Restore actions to worksheet, severity, issue type and search filters", () => {
+    const ignored = new Set(["ignored-sku"]);
+    const products = validationRowsForFilters(issues, ignored, new Set(), { worksheet: "Products", severity: "All", category: "All" });
+    const allWorksheets = validationRowsForFilters(issues, ignored, new Set(), { worksheet: "All worksheets", severity: "All", category: "All" });
+    const warnings = validationRowsForFilters(issues, ignored, new Set(), { worksheet: "Products", severity: "Warning", category: "All" });
+    const duplicates = validationRowsForFilters(issues, ignored, new Set(), { worksheet: "All worksheets", severity: "All", category: "duplicate-sku" });
+    const searched = validationRowsForFilters(issues, ignored, new Set(), { worksheet: "All worksheets", severity: "All", category: "All" }, "Duplicate SKU");
+
+    expect(validationActionScope(products, new Set())).toMatchObject({
+      visibleUnresolvedErrorFingerprints: ["error-price"],
+      visibleIgnoredErrorFingerprints: ["ignored-sku"]
+    });
+    expect(validationActionScope(allWorksheets, new Set()).visibleUnresolvedErrorFingerprints).toEqual(["error-price", "other"]);
+    expect(validationActionScope(warnings, new Set())).toMatchObject({
+      visibleUnresolvedErrorFingerprints: [],
+      visibleIgnoredErrorFingerprints: []
+    });
+    expect(validationActionScope(duplicates, new Set()).visibleIgnoredErrorFingerprints).toEqual(["ignored-sku"]);
+    expect(validationActionScope(searched, new Set()).visibleIgnoredErrorFingerprints).toEqual(["ignored-sku"]);
+  });
+
+  it("does not include filtered-out categories in visible or selected action scope", () => {
+    const priceRows = validationRowsForFilters(issues, new Set(["ignored-sku"]), new Set(), { worksheet: "Products", severity: "Error", category: "price" });
+    const scope = validationActionScope(priceRows, new Set(priceRows.map((row) => row.key)));
+
+    expect(scope.selectedUnresolvedErrorFingerprints).toEqual(["error-price"]);
+    expect(scope.selectedIgnoredErrorFingerprints).toEqual([]);
+    expect(scope.visibleUnresolvedErrorFingerprints).not.toContain("other");
+  });
+
+  it("keeps row deletion independent while using visible-scope fingerprints and status feedback", () => {
+    const importer = readFileSync(new URL("../components/data-mapper/workbook-importer.tsx", import.meta.url), "utf8");
+
+    expect(importer).toContain("Delete selected rows");
+    expect(importer).toContain("updateVisibleRowSelection(current, visibleEligibleRowKeys");
+    expect(importer).toContain("function updateValidationFilter");
+    expect(importer).toContain("function updateValidationSearch");
+    expect(importer).toContain("setSelectedRowKeys(new Set())");
+    expect(importer).toContain("actionScope.selectedUnresolvedErrorFingerprints");
+    expect(importer).toContain("actionScope.selectedIgnoredErrorFingerprints");
+    expect(importer).toContain("actionScope.visibleUnresolvedErrorFingerprints");
+    expect(importer).toContain("actionScope.visibleIgnoredErrorFingerprints");
+    expect(importer).toContain('role="status" aria-live="polite"');
   });
 });

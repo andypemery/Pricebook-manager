@@ -75,6 +75,30 @@ export function updateVisibleRowSelection(selectedRowKeys: ReadonlySet<string>, 
   return next;
 }
 
+export function validationActionScope(rows: readonly PreviewValidationRow[], selectedRowKeys: ReadonlySet<string>) {
+  const visibleUnresolved = new Set<string>();
+  const visibleIgnored = new Set<string>();
+  const selectedUnresolved = new Set<string>();
+  const selectedIgnored = new Set<string>();
+
+  for (const row of rows) {
+    const selected = selectedRowKeys.has(row.key);
+    for (const issue of row.issues) {
+      if (issue.severity !== "Error") continue;
+      const visibleTarget = issue.ignored ? visibleIgnored : visibleUnresolved;
+      visibleTarget.add(issue.fingerprint);
+      if (selected) (issue.ignored ? selectedIgnored : selectedUnresolved).add(issue.fingerprint);
+    }
+  }
+
+  return {
+    visibleUnresolvedErrorFingerprints: [...visibleUnresolved],
+    visibleIgnoredErrorFingerprints: [...visibleIgnored],
+    selectedUnresolvedErrorFingerprints: [...selectedUnresolved],
+    selectedIgnoredErrorFingerprints: [...selectedIgnored]
+  };
+}
+
 export function groupValidationIssuesByRow(issues: readonly PreviewValidationIssue[]) {
   const grouped = new Map<number, PreviewValidationIssue[]>();
   for (const issue of issues) {
