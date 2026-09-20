@@ -94,10 +94,10 @@ AXIOM_HUB_SHARED_SECRET
 VERCEL_PROJECT_ID
 VERCEL_TEAM_ID
 VERCEL_API_TOKEN
-BLOB_READ_WRITE_TOKEN
+BLOB_STORE_ID
 ```
 
-Private file upload/download remains framework-only unless storage is deliberately wired and tested.
+When a private Blob store is connected through Vercel OIDC, Vercel injects `VERCEL_OIDC_TOKEN` automatically; do not copy it into local files. `BLOB_READ_WRITE_TOKEN` remains a legacy local fallback only and is not required for the normal Vercel connection. Private file upload/download remains framework-only unless storage is deliberately wired and tested.
 
 ## MFA
 

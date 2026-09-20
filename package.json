@@ -14,9 +14,11 @@
     "build": "next build --webpack",
     "quality": "npm run lint && npm run typecheck && npm test && npm run build",
     "db:generate": "prisma generate",
-    "db:push": "prisma db push --skip-generate",
+    "db:migrate:deploy": "prisma migrate deploy",
+    "db:check-migrations": "tsx prisma/check-migration-state.ts",
     "db:setup": "tsx prisma/setup-production.ts",
-    "db:seed-demo": "tsx prisma/seed-demo.ts"
+    "db:seed-demo": "tsx prisma/seed-demo.ts",
+    "vercel-build": "npm run db:generate && npm run db:check-migrations && npm run db:setup && npm run build"
   },
   "dependencies": {
     "@prisma/client": "6.19.3",

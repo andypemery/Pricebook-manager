@@ -25,9 +25,7 @@ Controlled patch update from v1.0.7 to v1.0.8 for the configurable outbound emai
 
 Vercel should run the standard build command first:
 
-Historical command at the time:
-
-`npx prisma generate && npx prisma db push && npx tsx prisma/setup-production.ts && npm run build`
+The historical command generated Prisma Client, ran a now-retired schema-synchronisation step, performed setup, and built the application. It must not be reused. Current deployment guidance is in `README_DEPLOYMENT.md`.
 
 Your previous Vercel logs show Vercel can reach Prisma binaries and generate the client, so the local sandbox limitation should not apply on Vercel.
 
